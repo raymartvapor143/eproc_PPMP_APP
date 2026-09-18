@@ -1,0 +1,133 @@
+import axios from 'axios';
+
+const api = axios.create({
+    baseURL: '/api',
+    headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+    },
+    withCredentials: true,
+});
+
+// Auto-inject CSRF token if present
+const token = document.head.querySelector('meta[name="csrf-token"]');
+if (token) {
+    api.defaults.headers.common['X-CSRF-TOKEN'] = token.content;
+}
+
+// Global response interceptor for 401 unauthenticated
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response && error.response.status === 401) {
+            // Unauthenticated session
+            if (window.location.pathname !== '/login') {
+                window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
+export const authService = {
+    login: (credentials) => api.post('/login', credentials),
+    register: (data) => api.post('/register', data),
+    getPublicOffices: () => api.get('/public-offices'),
+    logout: () => api.post('/logout'),
+    getProfile: () => api.get('/me'),
+    updateProfile: (data) => api.put('/profile', data),
+    getSignatureUrl: () => '/api/profile/signature',
+};
+
+export const ppmpService = {
+    getAll: (params) => api.get('/ppmps', { params }),
+    getOne: (uuid) => api.get(`/ppmps/${uuid}`),
+    create: (data) => api.post('/ppmps', data),
+    update: (uuid, data) => api.put(`/ppmps/${uuid}`, data),
+
+    // Workflow actions
+    submitToHead: (uuid) => api.post(`/ppmps/${uuid}/submit-to-head`),
+    headApprove: (uuid) => api.post(`/ppmps/${uuid}/head/approve`),
+    headReturn: (uuid, data) => api.post(`/ppmps/${uuid}/head/return`, data),
+
+    submitForReview: (uuid) => api.post(`/ppmps/${uuid}/submit-for-review`),
+
+    budgetApprove: (uuid) => api.post(`/ppmps/${uuid}/budget/approve`),
+    budgetReturn: (uuid, data) => api.post(`/ppmps/${uuid}/budget/return`, data),
+
+    oppmoApprove: (uuid) => api.post(`/ppmps/${uuid}/oppmo/approve`),
+    oppmoReturn: (uuid, data) => api.post(`/ppmps/${uuid}/oppmo/return`, data),
+
+    twgApprove: (uuid) => api.post(`/ppmps/${uuid}/twg/approve`),
+    twgReturn: (uuid, data) => api.post(`/ppmps/${uuid}/twg/return`, data),
+
+    receive: (uuid) => api.post(`/ppmps/${uuid}/receive`),
+
+    // Attachments
+    uploadAttachment: (uuid, formData) => api.post(`/ppmps/${uuid}/attachments`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+    deleteAttachment: (uuid, attachment) => {
+        const attKey = (typeof attachment === 'object' && attachment !== null)
+            ? (attachment.encrypted_uuid || attachment.uuid)
+            : attachment;
+        return api.delete(`/ppmps/${uuid}/attachments/${attKey}`);
+    },
+    getAttachmentViewUrl: (uuid, attachment) => {
+        const attKey = (typeof attachment === 'object' && attachment !== null)
+            ? (attachment.encrypted_uuid || attachment.uuid)
+            : attachment;
+        return `/api/ppmps/${uuid}/attachments/${attKey}/view`;
+    },
+    getAttachmentDownloadUrl: (uuid, attachment) => {
+        const attKey = (typeof attachment === 'object' && attachment !== null)
+            ? (attachment.encrypted_uuid || attachment.uuid)
+            : attachment;
+        return `/api/ppmps/${uuid}/attachments/${attKey}/download`;
+    },
+    saveAttachmentList: (uuid, data) => api.post(`/ppmps/${uuid}/attachment-list`, data),
+    saveAppData: (uuid, data) => api.post(`/ppmps/${uuid}/app-data`, data),
+    requestAmendmentOrSupplemental: (uuid, formData) => api.post(`/ppmps/${uuid}/request-amendment-or-supplemental`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+    approveAmendment: (uuid) => api.post(`/ppmps/${uuid}/amendment/approve`),
+    rejectAmendment: (uuid, data) => api.post(`/ppmps/${uuid}/amendment/reject`, data),
+};
+
+export const dashboardService = {
+    getDashboard: () => api.get('/dashboard'),
+};
+
+export const notificationService = {
+    getAll: (params) => api.get('/notifications', { params }),
+    markAsRead: (id) => api.post(`/notifications/${id}/read`),
+    markAllAsRead: () => api.post('/notifications/read-all'),
+    getOffices: () => api.get('/offices'),
+};
+
+export const signatoryService = {
+    getAll: () => api.get('/signatories'),
+    create: (data) => api.post('/signatories', data),
+    update: (id, data) => api.put(`/signatories/${id}`, data),
+    delete: (id) => api.delete(`/signatories/${id}`),
+};
+
+export const userService = {
+    getAll: () => api.get('/users'),
+    changePassword: (id, password) => api.post(`/users/${id}/change-password`, { password }),
+    approve: (id) => api.post(`/users/${id}/approve`),
+    toggleStatus: (id) => api.post(`/users/${id}/toggle-status`),
+    delete: (id) => api.delete(`/users/${id}`),
+    getUserSignatureUrl: (id) => `/api/users/${id}/signature`,
+};
+
+export const officeService = {
+    getAll: () => api.get('/offices-list'),
+    create: (data) => api.post('/offices', data),
+    update: (id, data) => api.put(`/offices/${id}`, data),
+    delete: (id) => api.delete(`/offices/${id}`),
+    importOffices: (rows) => api.post('/offices/import', { rows }),
+};
+
+export default api;

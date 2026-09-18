@@ -1,0 +1,308 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.jsx';
+@source '../**/*.js';
+
+@theme {
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Custom Animation Utilities */
+@keyframes fadeInSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes flyInLeftRotate {
+    0% {
+        opacity: 0;
+        transform: translate3d(-80px, 40px, 0) scale(0.7) rotate(-8deg);
+    }
+    60% {
+        opacity: 1;
+        transform: translate3d(8px, -4px, 0) scale(1.03) rotate(1deg);
+    }
+    100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+    }
+}
+
+@keyframes dropInBounce {
+    0% {
+        opacity: 0;
+        transform: translate3d(0, -60px, 0) scale(0.75);
+    }
+    60% {
+        opacity: 1;
+        transform: translate3d(0, 8px, 0) scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+}
+
+@keyframes flyInRightGlide {
+    0% {
+        opacity: 0;
+        transform: translate3d(90px, -30px, 0) scale(0.65) rotate(10deg);
+    }
+    60% {
+        opacity: 1;
+        transform: translate3d(-10px, 4px, 0) scale(1.04) rotate(-2deg);
+    }
+    100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+    }
+}
+
+@keyframes paperPlaneFly {
+    0% {
+        transform: translate3d(-40px, 20px, 0) rotate(-15deg) scale(0.6);
+        opacity: 0;
+    }
+    40% {
+        opacity: 1;
+    }
+    70% {
+        transform: translate3d(10px, -8px, 0) rotate(5deg) scale(1.05);
+    }
+    100% {
+        transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes gentleFloat1 {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-6px) rotate(-0.5deg); }
+}
+
+@keyframes gentleFloat2 {
+    0%, 100% { transform: translateY(0px) scale(1); }
+    50% { transform: translateY(-8px) scale(1.01); }
+}
+
+@keyframes gentleFloat3 {
+    0%, 100% { transform: translateY(0px) rotate(0deg); }
+    50% { transform: translateY(-7px) rotate(0.8deg); }
+}
+
+@keyframes trailGlider {
+    0% { transform: translateX(-100%); opacity: 0; }
+    50% { opacity: 0.6; }
+    100% { transform: translateX(200%); opacity: 0; }
+}
+
+@keyframes landingFadeInDown {
+    0% {
+        opacity: 0;
+        transform: translate3d(0, -28px, 0);
+    }
+    100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes landingFadeInLeft {
+    0% {
+        opacity: 0;
+        transform: translate3d(-35px, 0, 0);
+    }
+    100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes landingFadeInRight {
+    0% {
+        opacity: 0;
+        transform: translate3d(40px, 0, 0);
+    }
+    100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes softPulseGlow {
+    0%, 100% {
+        box-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
+    }
+    50% {
+        box-shadow: 0 0 25px rgba(245, 158, 11, 0.35);
+    }
+}
+
+.landing-fade-top {
+    animation: landingFadeInDown 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.landing-hero-title {
+    animation: landingFadeInLeft 0.85s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+
+.landing-hero-sub {
+    animation: landingFadeInLeft 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+
+.landing-auth-card {
+    animation: landingFadeInRight 0.95s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
+
+.soft-glow-badge {
+    animation: softPulseGlow 4s ease-in-out infinite;
+}
+
+.intro-card-1 {
+    animation: flyInLeftRotate 0.9s cubic-bezier(0.19, 1, 0.22, 1) 0.15s both;
+}
+
+.intro-card-2 {
+    animation: dropInBounce 0.9s cubic-bezier(0.19, 1, 0.22, 1) 0.35s both;
+}
+
+.intro-card-3 {
+    animation: flyInRightGlide 1s cubic-bezier(0.19, 1, 0.22, 1) 0.55s both;
+}
+
+.flying-icon-paperplane {
+    animation: paperPlaneFly 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.6s both;
+}
+
+.float-loop-1 {
+    animation: gentleFloat1 4.5s ease-in-out infinite;
+}
+
+.float-loop-2 {
+    animation: gentleFloat2 5.2s ease-in-out infinite 0.4s;
+}
+
+.float-loop-3 {
+    animation: gentleFloat3 4.8s ease-in-out infinite 0.8s;
+}
+
+.trail-line-anim {
+    animation: trailGlider 3s ease-in-out infinite;
+}
+
+@keyframes slowPanZoom {
+    0% {
+        transform: scale(1.02) translate(0, 0);
+    }
+    50% {
+        transform: scale(1.07) translate(-1%, -1%);
+    }
+    100% {
+        transform: scale(1.02) translate(0, 0);
+    }
+}
+
+@keyframes subtleFloat {
+    0%, 100% {
+        transform: translateY(0px);
+    }
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+.animate-fade-in-up {
+    animation: fadeInSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slow-zoom {
+    animation: slowPanZoom 28s ease-in-out infinite;
+}
+
+.animate-subtle-float {
+    animation: subtleFloat 5s ease-in-out infinite;
+}
+
+/* Custom transitions and scrollbars */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* Custom print stylesheet for Official Government PPMP Document matching Davao del Sur template */
+@media print {
+    @page {
+        size: landscape;
+        margin: 0 !important;
+    }
+
+    html,
+    body {
+        background-color: #ffffff !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-size: 8.5pt !important;
+        padding: 8mm !important;
+        margin: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        box-sizing: border-box !important;
+    }
+
+    header,
+    nav,
+    footer,
+    .no-print {
+        display: none !important;
+    }
+
+    main {
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .print-only {
+        display: block !important;
+    }
+
+    .print-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        border: 1.5px solid #000000 !important;
+    }
+
+    .print-table th,
+    .print-table td {
+        border: 1px solid #000000 !important;
+        padding: 3px 5px !important;
+        font-size: 8pt !important;
+    }
+
+    .print-signature-box {
+        page-break-inside: avoid !important;
+    }
+}
