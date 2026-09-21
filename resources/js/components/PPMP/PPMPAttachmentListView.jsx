@@ -33,7 +33,8 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, onBack, onG
         (user?.role === 'twg' && ppmp?.status === 'TWG_REVIEW')
     );
 
-    const allowEdit = canEdit && (isCreatorEditable || isReviewerEditable || user?.role === 'admin');
+    const isScopeLocked = ppmp?.amendment_scope === 'PPMP_APP' && user?.role !== 'admin';
+    const allowEdit = canEdit && !isScopeLocked && (isCreatorEditable || isReviewerEditable || user?.role === 'admin');
 
     // Mode: 'create' (form mode to edit/create) or 'view' (official print layout)
     // If user cannot edit, force view mode
@@ -57,8 +58,12 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, onBack, onG
         ];
     });
 
-    // Signers initialized with PPMP signatories or fallback names
-    const signatures = ppmp?.signatures || [];
+    // Signers initialized with PPMP signatories or fallback to parent signatories if amended scope is PPMP/APP only
+    const signatures = (ppmp?.signatures && ppmp.signatures.length > 0)
+        ? ppmp.signatures
+        : ((ppmp?.amendment_scope === 'PPMP_APP' && ppmp?.parent?.signatures && ppmp.parent.signatures.length > 0)
+            ? ppmp.parent.signatures
+            : []);
     const preparedSig = signatures.find(s => s.role === 'end_user');
     const headSig = signatures.find(s => s.role === 'head');
     const twgSig = signatures.find(s => s.role === 'twg');
@@ -239,7 +244,9 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, onBack, onG
     const calculatedTotal = rows.reduce((sum, r) => sum + (parseFloat(r.totalCost) || 0), 0);
     const displayTotalBudget = calculatedTotal > 0 ? calculatedTotal : allocatedBudget;
 
-    const isReadyToPrint = ppmp?.status === 'READY_TO_PRINT';
+    // If PPMP/APP scope only, the List of Attachment is locked & retains its approved baseline status from parent
+    const isParentApproved = ppmp?.amendment_scope === 'PPMP_APP' && ppmp?.parent?.status === 'READY_TO_PRINT';
+    const isReadyToPrint = ppmp?.status === 'READY_TO_PRINT' || isParentApproved;
 
     const handlePrint = () => {
         if (!isReadyToPrint) {
@@ -297,8 +304,8 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, onBack, onG
                                     Edit Fields
                                 </button>
                             ) : (
-                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-xs font-medium rounded-lg" title="Document is under formal review and locked from end-user edits.">
-                                    <span>Locked for Review</span>
+                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/80 border border-slate-700 text-slate-400 text-xs font-medium rounded-lg" title={isScopeLocked ? "PPMP List of Attachment is locked. Approved revision scope is restricted to PPMP/APP procurement items only." : "Document is under formal review and locked from end-user edits."}>
+                                    <span>{isScopeLocked ? "Locked (PPMP/APP Scope Only)" : "Locked for Review"}</span>
                                 </div>
                             )}
                             {isReadyToPrint ? (

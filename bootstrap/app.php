@@ -16,10 +16,14 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => RoleMiddleware::class,
         ]);
 
-        // State-safe CSRF exemptions for local API requests if accessed via session or direct test
-        $middleware->validateCsrfTokens(except: [
-            'api/*',
+        // Defensive headers and anti-session-hijacking protection
+        $middleware->web(append: [
+            \App\Http\Middleware\SecurityHeadersMiddleware::class,
+            \App\Http\Middleware\VerifySessionFingerprint::class,
         ]);
+
+        // Note: All state-changing web and api requests require strict CSRF validation.
+        // No exemptions are granted for api/* to prevent CSRF / Session-Riding attacks.
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

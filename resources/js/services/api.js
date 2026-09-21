@@ -10,18 +10,72 @@ const api = axios.create({
     withCredentials: true,
 });
 
-// Auto-inject CSRF token if present
-const token = document.head.querySelector('meta[name="csrf-token"]');
-if (token) {
-    api.defaults.headers.common['X-CSRF-TOKEN'] = token.content;
+// Helper to update CSRF token everywhere in memory and DOM
+export const setCsrfToken = (newToken) => {
+    if (!newToken) return;
+    let meta = document.head.querySelector('meta[name="csrf-token"]');
+    if (!meta) {
+        meta = document.createElement('meta');
+        meta.name = 'csrf-token';
+        document.head.appendChild(meta);
+    }
+    meta.content = newToken;
+    api.defaults.headers.common['X-CSRF-TOKEN'] = newToken;
+};
+
+// Auto-inject initial CSRF token if present
+const initialToken = document.head.querySelector('meta[name="csrf-token"]');
+if (initialToken && initialToken.content) {
+    setCsrfToken(initialToken.content);
 }
 
-// Global response interceptor for 401 unauthenticated
+// Request interceptor: always inject latest CSRF token
+api.interceptors.request.use((config) => {
+    const meta = document.head.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.content) {
+        config.headers['X-CSRF-TOKEN'] = meta.content;
+    }
+    return config;
+});
+
+// Flag to prevent infinite retry loops on 419
+let isRefreshingCsrf = false;
+
+// Global response interceptor for 401 (unauthorized) and 419 (CSRF token expired)
 api.interceptors.response.use(
-    (response) => response,
-    (error) => {
+    (response) => {
+        // If server sent an updated CSRF token, adopt it immediately
+        if (response.data && response.data.csrf_token) {
+            setCsrfToken(response.data.csrf_token);
+        }
+        return response;
+    },
+    async (error) => {
+        const originalRequest = error.config;
+
+        // HTTP 419: CSRF Token Expired / Mismatched -> Fetch fresh token and retry once
+        if (error.response && error.response.status === 419 && !originalRequest._retry && !isRefreshingCsrf) {
+            originalRequest._retry = true;
+            isRefreshingCsrf = true;
+
+            try {
+                const tokenRes = await axios.get('/api/csrf-token', { withCredentials: true });
+                if (tokenRes.data && tokenRes.data.csrf_token) {
+                    setCsrfToken(tokenRes.data.csrf_token);
+                    originalRequest.headers['X-CSRF-TOKEN'] = tokenRes.data.csrf_token;
+                    isRefreshingCsrf = false;
+                    return api(originalRequest);
+                }
+            } catch (refreshErr) {
+                isRefreshingCsrf = false;
+                window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+                return Promise.reject(refreshErr);
+            }
+            isRefreshingCsrf = false;
+        }
+
+        // HTTP 401: Unauthenticated or session invalidated (e.g. anti-hijacking triggered)
         if (error.response && error.response.status === 401) {
-            // Unauthenticated session
             if (window.location.pathname !== '/login') {
                 window.dispatchEvent(new CustomEvent('auth:unauthorized'));
             }
@@ -31,10 +85,28 @@ api.interceptors.response.use(
 );
 
 export const authService = {
-    login: (credentials) => api.post('/login', credentials),
+    login: async (credentials) => {
+        const res = await api.post('/login', credentials);
+        if (res.data && res.data.csrf_token) {
+            setCsrfToken(res.data.csrf_token);
+        }
+        return res;
+    },
     register: (data) => api.post('/register', data),
     getPublicOffices: () => api.get('/public-offices'),
-    logout: () => api.post('/logout'),
+    logout: async () => {
+        try {
+            const res = await api.post('/logout');
+            if (res.data && res.data.csrf_token) {
+                setCsrfToken(res.data.csrf_token);
+            }
+            return res;
+        } catch (e) {
+            // Even if logout fails, purge token and dispatch
+            return e;
+        }
+    },
+    getCsrfToken: () => api.get('/csrf-token'),
     getProfile: () => api.get('/me'),
     updateProfile: (data) => api.put('/profile', data),
     getSignatureUrl: () => '/api/profile/signature',

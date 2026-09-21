@@ -216,7 +216,7 @@ export const AttachmentUploader = ({
                                     const isImg = isImageFile(att.mime_type, att.original_filename);
                                     const sourcePpmp = att._sourcePpmp;
                                     const sourceUuid = sourcePpmp?.uuid || ppmp.uuid;
-                                    const sourceLabel = sourcePpmp?.is_annual || (!sourcePpmp?.parent_id && Number(sourcePpmp?.ppmp_number) === 0)
+                                    const sourceLabel = !sourcePpmp?.parent_id
                                         ? 'Annual Baseline'
                                         : (sourcePpmp?.amendment_type === 'AMENDMENT' ? 'Amended Baseline' : 'Supplemental Baseline');
 

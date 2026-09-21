@@ -195,11 +195,11 @@ export const PPMPListPage = ({ user, onSelectPpmp, onNavigate }) => {
                                                     <span className="font-mono text-[11px] text-slate-600 font-semibold" title="PPMP Number">
                                                         PPMP No. {ppmp.ppmp_number}
                                                     </span>
-                                                    {ppmp.is_annual || (!ppmp.parent_id && Number(ppmp.ppmp_number) === 0) ? (
+                                                    {!ppmp.parent_id ? (
                                                         <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold tracking-tight uppercase border bg-blue-100 text-blue-800 border-blue-300">
                                                             Annual
                                                         </span>
-                                                    ) : (Number(ppmp.ppmp_number) > 0 || ppmp.parent_id) && (
+                                                    ) : (
                                                         <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold tracking-tight uppercase border ${
                                                             ppmp.amendment_type === 'AMENDMENT'
                                                                 ? 'bg-purple-100 text-purple-800 border-purple-300'

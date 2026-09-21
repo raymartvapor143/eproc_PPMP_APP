@@ -21,12 +21,45 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
 
     return (
         <div className="bg-white min-h-screen font-sans text-black">
+            {/* Force landscape printing without browser header/footer margins */}
+            <style>{`
+                @media print {
+                    @page {
+                        size: landscape !important;
+                        margin: 0 !important;
+                    }
+                    html, body {
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        background: white !important;
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                    }
+                    .no-print {
+                        display: none !important;
+                    }
+                    .print-signature-box {
+                        page-break-inside: avoid !important;
+                        break-inside: avoid !important;
+                    }
+                    .print-table {
+                        page-break-inside: auto;
+                    }
+                    .print-table tr {
+                        page-break-inside: avoid;
+                        page-break-after: auto;
+                    }
+                }
+            `}</style>
+
             {/* Top Action Bar (Hidden in Print) */}
             <div className="no-print bg-slate-900 text-white px-6 py-3 flex items-center justify-between shadow-md">
                 <div className="flex items-center gap-3">
                     <button
                         onClick={onBack}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded border border-slate-700 transition"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded border border-slate-700 transition cursor-pointer"
                     >
                         <ArrowLeft className="w-4 h-4" /> Back to Workspace
                     </button>
@@ -49,8 +82,8 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
                 </button>
             </div>
 
-            {/* Exact PDF Layout Container */}
-            <div className="p-4 sm:p-8 max-w-[1550px] mx-auto text-black bg-white">
+            {/* Exact PDF Layout Container - Zero margin & full width on print */}
+            <div className="p-4 sm:p-8 max-w-[1550px] mx-auto text-black bg-white print:p-3 print:m-0 print:max-w-none print:w-full">
                 {/* Header Grid matching PDF */}
                 <table className="w-full border-collapse mb-1">
                     <tbody>
@@ -292,15 +325,12 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
 
                         {/* Spacer row between signature tiers */}
                         <tr>
-                            <td colSpan={2} className="py-2"></td>
-                        </tr>
-                        <tr>
-                            <td colSpan={2} className="py-2"></td>
+                            <td colSpan={2} className="py-1 print:py-0.5"></td>
                         </tr>
 
                         {/* Bottom row: Reviewed as to Budgetary Requirement & Reviewed by BAC-Secretariat */}
                         <tr>
-                            <td className="w-1/2 p-1 align-top pt-2">
+                            <td className="w-1/2 p-1 align-top pt-1 print:pt-0.5">
                                 <div className="font-bold text-[9px] mb-1">Reviewed as to Budgetary Requirement</div>
                                 <div className="text-center flex flex-col items-center justify-end">
                                     <div className="relative inline-flex items-center justify-center">
@@ -329,7 +359,7 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
                                     )}
                                 </div>
                             </td>
-                            <td className="w-1/2 p-1 align-top pt-2">
+                            <td className="w-1/2 p-1 align-top pt-1 print:pt-0.5">
                                 <div className="font-bold text-[9px] mb-1">Reviewed by BAC- Secretariat</div>
                                 <div className="text-center flex flex-col items-center justify-end">
                                     <div className="relative inline-flex items-center justify-center">
@@ -363,7 +393,7 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
                 </table>
 
                 {/* System Generated / E-Signature Validity Notice */}
-                <div className="mt-4 pt-2 border-t border-dotted border-slate-300 text-center">
+                <div className="mt-2 pt-1 border-t border-dotted border-slate-300 text-center print:mt-1 print:pt-0.5">
                     <p className="text-[8px] italic text-slate-600 font-sans tracking-wide">
                         * This is an electronically generated and certified document under the Electronic Procurement Management System. Valid even without a physical or handwritten signature.
                     </p>

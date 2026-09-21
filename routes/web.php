@@ -24,13 +24,14 @@ Route::prefix('api')->group(function () {
     Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
     Route::get('/public-offices', [OfficeController::class, 'index'])->middleware('throttle:60,1');
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/csrf-token', [AuthController::class, 'csrfToken'])->middleware('throttle:60,1');
 
     // Authenticated API routes (Protected by session authentication & API rate-limiting)
-    Route::middleware(['web', 'auth', 'throttle:120,1'])->group(function () {
+    Route::middleware(['auth', 'throttle:120,1'])->group(function () {
         Route::get('/me', [AuthController::class, 'me']);
         Route::put('/profile', [AuthController::class, 'updateProfile']);
-        Route::get('/profile/signature', [AuthController::class, 'getSignature']);
-        Route::get('/users/{id}/signature', [UserController::class, 'getSignature']);
+        Route::get('/profile/signature', [AuthController::class, 'getSignature'])->middleware('throttle:60,1');
+        Route::get('/users/{id}/signature', [UserController::class, 'getSignature'])->middleware('throttle:60,1');
         Route::get('/dashboard', [DashboardController::class, 'index']);
 
         // Admin User Management

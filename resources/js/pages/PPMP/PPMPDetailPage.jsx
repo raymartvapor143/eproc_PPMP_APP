@@ -53,6 +53,8 @@ export const PPMPDetailPage = ({
     const [isItemsModalOpen, setIsItemsModalOpen] = useState(false);
     const [activeSubTab, setActiveSubTab] = useState('overview'); // overview, attachments, timeline
     const [isAmendModalOpen, setIsAmendModalOpen] = useState(false);
+    const [scopePpmpApp, setScopePpmpApp] = useState(true);
+    const [scopeAttachmentList, setScopeAttachmentList] = useState(false);
     const [amendType, setAmendType] = useState('SUPPLEMENTAL'); // SUPPLEMENTAL or AMENDMENT
     const [amendReason, setAmendReason] = useState('');
     const [amendFile, setAmendFile] = useState(null);
@@ -324,6 +326,8 @@ export const PPMPDetailPage = ({
     };
 
     const handleOpenAmendModal = () => {
+        setScopePpmpApp(true);
+        setScopeAttachmentList(false);
         setAmendType('SUPPLEMENTAL');
         setAmendReason('');
         setAmendFile(null);
@@ -334,6 +338,11 @@ export const PPMPDetailPage = ({
     const handleAmendSubmit = async (e) => {
         e.preventDefault();
         setAmendError('');
+
+        if (!scopePpmpApp && !scopeAttachmentList) {
+            setAmendError('Please select at least one component to update (PPMP / APP or PPMP List of Attachment).');
+            return;
+        }
 
         if (!amendReason.trim()) {
             setAmendError('Please provide a valid justification or reason for this request.');
@@ -350,8 +359,16 @@ export const PPMPDetailPage = ({
             return;
         }
 
+        let requestScope = 'ALL';
+        if (scopePpmpApp && !scopeAttachmentList) {
+            requestScope = 'PPMP_APP';
+        } else if (!scopePpmpApp && scopeAttachmentList) {
+            requestScope = 'ATTACHMENT_LIST';
+        }
+
         const formData = new FormData();
-        formData.append('request_type', amendType);
+        formData.append('request_scope', requestScope);
+        formData.append('request_type', scopePpmpApp ? amendType : 'AMENDMENT');
         formData.append('reason', amendReason.trim());
         formData.append('letter_file', amendFile);
 
@@ -370,9 +387,7 @@ export const PPMPDetailPage = ({
 
     const handleApproveAmendment = async () => {
         const typeLabel = ppmp.amendment_type === 'SUPPLEMENTAL' ? 'Supplemental' : 'Amendment';
-        const currentNum = ppmp.ppmp_number;
-        const nextNum = (parseInt(currentNum, 10) || 0) + 1;
-        if (!window.confirm(`Approve this ${typeLabel} request?\n\nThis will mark the current PPMP as Annual baseline, generate a new PPMP No. "${nextNum}" copying all existing data, and reopen it in DRAFT for editing.`)) {
+        if (!window.confirm(`Approve this ${typeLabel} request?\n\nThis will mark the current PPMP as baseline, create a revision in DRAFT retaining PPMP No. "${ppmp.ppmp_number}" for manual editing, and reopen it for modifications.`)) {
             return;
         }
 
@@ -429,11 +444,11 @@ export const PPMPDetailPage = ({
                         <div className="flex items-center gap-2 flex-wrap">
                             <h1 className="text-base font-extrabold text-slate-900 font-mono flex items-center gap-1.5">
                                 PPMP No. {ppmp.ppmp_number}
-                                {ppmp.is_annual || (!ppmp.parent_id && Number(ppmp.ppmp_number) === 0) ? (
+                                {!ppmp.parent_id ? (
                                     <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-tight uppercase border bg-blue-100 text-blue-800 border-blue-300">
                                         Annual
                                     </span>
-                                ) : (Number(ppmp.ppmp_number) > 0 || ppmp.parent_id) && (
+                                ) : (
                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold tracking-tight uppercase border ${ppmp.amendment_type === 'AMENDMENT'
                                             ? 'bg-purple-100 text-purple-800 border-purple-300'
                                             : 'bg-emerald-100 text-emerald-800 border-emerald-300'
@@ -511,13 +526,25 @@ export const PPMPDetailPage = ({
                     )}
 
                     {canEdit && (
-                        <button
-                            onClick={onEdit}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition"
-                        >
-                            <Edit3 className="w-4 h-4" />
-                            Edit PPMP
-                        </button>
+                        ppmp.amendment_scope === 'ATTACHMENT_LIST' && user.role !== 'admin' ? (
+                            <button
+                                type="button"
+                                onClick={() => setIsAttachmentListView(true)}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-semibold transition"
+                                title="PPMP items are locked for this revision. The approved request scope is restricted to the PPMP List of Attachment only. Click to edit List of Attachment."
+                            >
+                                <FileSpreadsheet className="w-4 h-4 text-amber-600" />
+                                Edit List of Attachment (Scope Restricted)
+                            </button>
+                        ) : (
+                            <button
+                                onClick={onEdit}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold transition"
+                            >
+                                <Edit3 className="w-4 h-4" />
+                                Edit PPMP
+                            </button>
+                        )
                     )}
 
                     {canSubmitToHead && (
@@ -607,10 +634,24 @@ export const PPMPDetailPage = ({
                             <div>
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <h4 className="text-sm font-bold text-amber-950">
-                                        Pending Administrator Approval: {(ppmp.requested_amendment_type || ppmp.amendment_type) === 'SUPPLEMENTAL' ? 'Supplemental Request' : 'Amendment Request'}
+                                        Pending Administrator Approval: {
+                                            (ppmp.requested_amendment_scope || ppmp.amendment_scope) === 'ATTACHMENT_LIST'
+                                                ? 'Update PPMP List of Attachment Request'
+                                                : ((ppmp.requested_amendment_type || ppmp.amendment_type) === 'SUPPLEMENTAL' ? 'Supplemental Request' : 'Amendment Request')
+                                        }
                                     </h4>
                                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 bg-amber-200 text-amber-900 rounded">
                                         Awaiting Admin Review
+                                    </span>
+                                    {/* Scope badge */}
+                                    <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-100 text-indigo-800 border border-indigo-200 rounded">
+                                        Scope: {
+                                            (ppmp.requested_amendment_scope || ppmp.amendment_scope) === 'ATTACHMENT_LIST'
+                                                ? 'Attachment List Only'
+                                                : (ppmp.requested_amendment_scope || ppmp.amendment_scope) === 'PPMP_APP'
+                                                    ? 'PPMP / APP Only'
+                                                    : 'Full PPMP (All Components)'
+                                        }
                                     </span>
                                 </div>
                                 <p className="text-xs text-amber-800 mt-1 leading-relaxed">
@@ -813,7 +854,8 @@ export const PPMPDetailPage = ({
                             <div className={`space-y-3 ${historicalPpmps.length > 5 ? 'max-h-[460px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent' : ''}`}>
                             {historicalPpmps.map((histPpmp) => {
                                 const isExpanded = Boolean(expandedPpmpIds[histPpmp.id]);
-                                const isAnnualRoot = histPpmp.is_annual || (!histPpmp.parent_id && Number(histPpmp.ppmp_number) === 0);
+                                // Only the very first created root PPMP (no parent_id) is the Annual PPMP
+                                const isAnnualRoot = !histPpmp.parent_id;
                                 const isAmended = histPpmp.amendment_type === 'AMENDMENT';
 
                                 return (
@@ -840,7 +882,7 @@ export const PPMPDetailPage = ({
                                                 <div>
                                                     <div className="flex items-center gap-2 flex-wrap">
                                                         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                                                            {isAnnualRoot ? 'Old / Annual PPMP (Folded Baseline)' : 'Previous / Baseline PPMP (Folded)'}
+                                                            {isAnnualRoot ? 'Old / Annual PPMP (Folded Baseline)' : (isAmended ? 'Previous / Amended PPMP (Folded)' : 'Previous / Supplemental PPMP (Folded)')}
                                                         </h3>
                                                         <span className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded border ${
                                                             isAnnualRoot
@@ -853,7 +895,7 @@ export const PPMPDetailPage = ({
                                                         </span>
                                                     </div>
                                                     <p className="text-[11px] text-slate-500 mt-0.5">
-                                                        {isAnnualRoot ? 'Original approved baseline data' : 'Previous version baseline data'} copied into later revisions
+                                                        {isAnnualRoot ? 'Original approved baseline data' : `${isAmended ? 'Amended' : 'Supplemental'} revision baseline data`} copied into later revisions
                                                     </p>
                                                 </div>
                                             </div>
@@ -1328,18 +1370,18 @@ export const PPMPDetailPage = ({
                                 <div>
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <h2 className="text-base font-bold uppercase tracking-wide text-white">
-                                            {selectedReviewPpmp.is_annual || (!selectedReviewPpmp.parent_id && Number(selectedReviewPpmp.ppmp_number) === 0)
+                                            {!selectedReviewPpmp.parent_id
                                                 ? 'Old / Annual PPMP — Full Wide Review'
-                                                : 'Previous / Baseline PPMP — Full Wide Review'}
+                                                : (selectedReviewPpmp.amendment_type === 'AMENDMENT' ? 'Previous / Amended PPMP — Full Wide Review' : 'Previous / Supplemental PPMP — Full Wide Review')}
                                         </h2>
                                         <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded border ${
-                                            selectedReviewPpmp.is_annual || (!selectedReviewPpmp.parent_id && Number(selectedReviewPpmp.ppmp_number) === 0)
+                                            !selectedReviewPpmp.parent_id
                                                 ? 'bg-blue-800 text-blue-200 border-blue-600'
                                                 : selectedReviewPpmp.amendment_type === 'AMENDMENT'
                                                 ? 'bg-purple-800 text-purple-200 border-purple-600'
                                                 : 'bg-emerald-800 text-emerald-200 border-emerald-600'
                                         }`}>
-                                            PPMP No. {selectedReviewPpmp.ppmp_number} &bull; {selectedReviewPpmp.is_annual || (!selectedReviewPpmp.parent_id && Number(selectedReviewPpmp.ppmp_number) === 0)
+                                            PPMP No. {selectedReviewPpmp.ppmp_number} &bull; {!selectedReviewPpmp.parent_id
                                                 ? 'Annual Baseline'
                                                 : (selectedReviewPpmp.amendment_type === 'AMENDMENT' ? 'Amended Baseline' : 'Supplemental Baseline')}
                                         </span>
@@ -1348,7 +1390,7 @@ export const PPMPDetailPage = ({
                                         </span>
                                     </div>
                                     <p className="text-xs text-slate-400 mt-0.5 truncate max-w-2xl">
-                                        {selectedReviewPpmp.is_annual || (!selectedReviewPpmp.parent_id && Number(selectedReviewPpmp.ppmp_number) === 0)
+                                        {!selectedReviewPpmp.parent_id
                                             ? 'Original baseline plan'
                                             : 'Historical revision baseline'} &bull; Project: {selectedReviewPpmp.title} &bull; CY {selectedReviewPpmp.fiscal_year}
                                     </p>
@@ -1543,53 +1585,110 @@ export const PPMPDetailPage = ({
                                     </div>
                                 </div>
 
-                                {/* Option Selection: Supplemental vs Amend */}
+                                 {/* Component to Change Selection */}
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                                        Request Option <span className="text-rose-500">*</span>
+                                        What to Change <span className="text-rose-500">*</span>
                                     </label>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <label
-                                            className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition ${amendType === 'SUPPLEMENTAL'
-                                                    ? 'border-amber-500 bg-amber-50/50 text-amber-950 font-bold'
+                                            className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
+                                                scopePpmpApp
+                                                    ? 'border-amber-500 bg-amber-50/50 text-amber-950 font-bold shadow-xs'
                                                     : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                                                }`}
+                                            }`}
                                         >
                                             <input
-                                                type="radio"
-                                                name="request_type"
-                                                value="SUPPLEMENTAL"
-                                                checked={amendType === 'SUPPLEMENTAL'}
-                                                onChange={() => setAmendType('SUPPLEMENTAL')}
-                                                className="text-amber-600 focus:ring-amber-500 h-4 w-4"
+                                                type="checkbox"
+                                                checked={scopePpmpApp}
+                                                onChange={(e) => setScopePpmpApp(e.target.checked)}
+                                                className="mt-0.5 rounded text-amber-600 focus:ring-amber-500 h-4 w-4"
                                             />
                                             <div>
-                                                <div className="text-xs">Supplemental</div>
-                                                <div className="text-[10px] text-slate-500 font-normal">Add new procurement items</div>
+                                                <div className="text-xs">PPMP / APP</div>
+                                                <div className="text-[10px] text-slate-500 font-normal mt-0.5">
+                                                    Procurement items, schedule & budget plan
+                                                </div>
                                             </div>
                                         </label>
 
                                         <label
-                                            className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition ${amendType === 'AMENDMENT'
-                                                    ? 'border-blue-500 bg-blue-50/50 text-blue-950 font-bold'
+                                            className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition select-none ${
+                                                scopeAttachmentList
+                                                    ? 'border-indigo-500 bg-indigo-50/50 text-indigo-950 font-bold shadow-xs'
                                                     : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                                                }`}
+                                            }`}
                                         >
                                             <input
-                                                type="radio"
-                                                name="request_type"
-                                                value="AMENDMENT"
-                                                checked={amendType === 'AMENDMENT'}
-                                                onChange={() => setAmendType('AMENDMENT')}
-                                                className="text-blue-600 focus:ring-blue-500 h-4 w-4"
+                                                type="checkbox"
+                                                checked={scopeAttachmentList}
+                                                onChange={(e) => setScopeAttachmentList(e.target.checked)}
+                                                className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                                             />
                                             <div>
-                                                <div className="text-xs">Amend</div>
-                                                <div className="text-[10px] text-slate-500 font-normal">Modify approved items/specs</div>
+                                                <div className="text-xs">Update PPMP List of Attachment</div>
+                                                <div className="text-[10px] text-slate-500 font-normal mt-0.5">
+                                                    Standard attachment item rows & specifications
+                                                </div>
                                             </div>
                                         </label>
                                     </div>
+                                    <div className="text-[10px] text-slate-500 mt-1.5 italic">
+                                        Tip: You can select either one or both to update all components of the PPMP.
+                                    </div>
                                 </div>
+
+                                {/* Option Selection: Supplemental vs Amend (Shown only when PPMP / APP is selected) */}
+                                {scopePpmpApp && (
+                                    <div className="p-3.5 bg-amber-50/40 border border-amber-200 rounded-xl space-y-2 animate-in fade-in duration-150">
+                                        <label className="block text-xs font-bold text-amber-950 uppercase tracking-wider">
+                                            PPMP / APP Request Type <span className="text-rose-500">*</span>
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <label
+                                                className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
+                                                    amendType === 'SUPPLEMENTAL'
+                                                        ? 'border-amber-500 bg-white text-amber-950 font-bold shadow-2xs'
+                                                        : 'border-amber-200/80 bg-white/70 hover:bg-white text-slate-700'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="request_type"
+                                                    value="SUPPLEMENTAL"
+                                                    checked={amendType === 'SUPPLEMENTAL'}
+                                                    onChange={() => setAmendType('SUPPLEMENTAL')}
+                                                    className="text-amber-600 focus:ring-amber-500 h-4 w-4"
+                                                />
+                                                <div>
+                                                    <div className="text-xs">Supplemental</div>
+                                                    <div className="text-[10px] text-slate-500 font-normal">Add new procurement items</div>
+                                                </div>
+                                            </label>
+
+                                            <label
+                                                className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition ${
+                                                    amendType === 'AMENDMENT'
+                                                        ? 'border-blue-500 bg-white text-blue-950 font-bold shadow-2xs'
+                                                        : 'border-amber-200/80 bg-white/70 hover:bg-white text-slate-700'
+                                                }`}
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="request_type"
+                                                    value="AMENDMENT"
+                                                    checked={amendType === 'AMENDMENT'}
+                                                    onChange={() => setAmendType('AMENDMENT')}
+                                                    className="text-blue-600 focus:ring-blue-500 h-4 w-4"
+                                                />
+                                                <div>
+                                                    <div className="text-xs">Amend</div>
+                                                    <div className="text-[10px] text-slate-500 font-normal">Modify approved items/specs</div>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Reason / Justification */}
                                 <div>

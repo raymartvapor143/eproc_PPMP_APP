@@ -78,11 +78,16 @@ class AuthController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
+        // Store client fingerprint to guard against session hijacking
+        $request->session()->put('_client_fingerprint', hash('sha256', (string) $request->userAgent()));
+        $request->session()->put('_client_user_agent_preview', Str::limit((string) $request->userAgent(), 150));
+
         AuditLog::log('USER_LOGIN', 'users', $user->id, null, ['email' => $user->email, 'role' => $user->role], $user->id);
 
         return response()->json([
             'message' => 'Login successful.',
             'user' => $user->load('office'),
+            'csrf_token' => csrf_token(),
         ]);
     }
 
@@ -94,13 +99,13 @@ class AuthController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
-            'role' => 'nullable|string|in:end_user,head,budget_officer,oppmo,twg,admin',
-            'phone_number' => 'nullable|string|max:30',
-            'address' => 'nullable|string|max:500',
+            'role' => 'required|string|in:end_user,head,budget_officer,oppmo,twg',
+            'phone_number' => 'required|string|max:30',
+            'address' => 'required|string|max:500',
             'password' => 'required|string|min:6|confirmed',
             'office_id' => 'required|exists:offices,id',
-            'designation' => 'nullable|string|max:255',
-            'signature' => 'nullable|string',
+            'designation' => 'required|string|max:255',
+            'signature' => 'required|string',
         ]);
 
         $signaturePath = null;
@@ -167,6 +172,17 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Logged out successfully.',
+            'csrf_token' => csrf_token(),
+        ]);
+    }
+
+    /**
+     * Fresh CSRF token for SPA requests
+     */
+    public function csrfToken(Request $request): JsonResponse
+    {
+        return response()->json([
+            'csrf_token' => csrf_token(),
         ]);
     }
 

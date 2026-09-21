@@ -150,7 +150,9 @@ class PpmpAttachmentController extends Controller
             'filename' => $attachment->original_filename
         ], $user->id);
 
-        return response()->download($fullPath, $attachment->original_filename, [
+        $safeFilename = preg_replace('/[\r\n"\'\\\\]+/', '_', $attachment->original_filename);
+
+        return response()->download($fullPath, $safeFilename, [
             'Content-Type' => $attachment->mime_type ?: 'application/octet-stream',
             'X-Content-Type-Options' => 'nosniff',
         ]);
@@ -194,10 +196,11 @@ class PpmpAttachmentController extends Controller
         }
 
         $fullPath = Storage::disk('local')->path($attachment->storage_path);
+        $safeFilename = preg_replace('/[\r\n"\'\\\\]+/', '_', $attachment->original_filename);
 
         return response()->file($fullPath, [
             'Content-Type' => $attachment->mime_type ?: 'application/octet-stream',
-            'Content-Disposition' => 'inline; filename="' . addslashes($attachment->original_filename) . '"',
+            'Content-Disposition' => 'inline; filename="' . $safeFilename . '"',
             'X-Content-Type-Options' => 'nosniff',
         ]);
     }

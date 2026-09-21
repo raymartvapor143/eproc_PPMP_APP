@@ -141,6 +141,7 @@ export const PPMPRoutingPrintView = ({ ppmp, onBack }) => {
                                 <th className="border border-slate-900 p-2 w-44">To</th>
                                 <th className="border border-slate-900 p-2 w-36">Date & Time Submitted</th>
                                 <th className="border border-slate-900 p-2 w-36">Date & Time Received</th>
+                                <th className="border border-slate-900 p-2 w-36">Date Approved / Suspended</th>
                                 <th className="border border-slate-900 p-2 text-left">Remarks / Action Taken</th>
                             </tr>
                         </thead>
@@ -201,7 +202,41 @@ export const PPMPRoutingPrintView = ({ ppmp, onBack }) => {
                                                 {route.submitted_at ? formatDate(route.submitted_at) : '—'}
                                             </td>
                                             <td className="border border-slate-900 p-2 text-center font-mono text-[10px] text-slate-700">
-                                                {route.received_at ? formatDate(route.received_at) : '—'}
+                                                {(() => {
+                                                    const isDraft = route.action === 'DRAFT_CREATED';
+                                                    const isLatest = idx === routes.length - 1;
+                                                    const hasPassedOrActed = !isLatest || Boolean(route.acted_at);
+                                                    const effectiveReceivedAt = route.received_at || (isDraft ? (route.submitted_at || route.created_at) : (hasPassedOrActed ? (route.acted_at || route.submitted_at) : null));
+                                                    return effectiveReceivedAt ? formatDate(effectiveReceivedAt) : 'Pending Receipt';
+                                                })()}
+                                            </td>
+                                            <td className="border border-slate-900 p-2 text-center font-mono text-[10px]">
+                                                {(() => {
+                                                    const isDraft = route.action === 'DRAFT_CREATED';
+                                                    const isLatest = idx === routes.length - 1;
+                                                    const hasPassedOrActed = !isLatest || Boolean(route.acted_at);
+                                                    const isSuspendedAction = route.action?.includes('RETURNED') || route.status?.includes('RETURNED') || route.action?.includes('REJECTED');
+                                                    const isApprovedAction = route.action?.includes('APPROVED') || route.status?.includes('APPROVED') || route.action === 'READY_TO_PRINT' || route.status === 'READY_TO_PRINT';
+                                                    const decisionTimestamp = route.acted_at || (hasPassedOrActed && !isDraft ? route.submitted_at : null);
+
+                                                    if (isSuspendedAction) {
+                                                        return decisionTimestamp ? (
+                                                            <span className="text-rose-700 font-semibold block">
+                                                                Suspended: {formatDate(decisionTimestamp)}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-slate-400 italic">—</span>
+                                                        );
+                                                    }
+                                                    if (isApprovedAction && decisionTimestamp) {
+                                                        return (
+                                                            <span className="text-emerald-700 font-semibold block">
+                                                                Approved: {formatDate(decisionTimestamp)}
+                                                            </span>
+                                                        );
+                                                    }
+                                                    return <span className="text-slate-400 italic">—</span>;
+                                                })()}
                                             </td>
                                             <td className="border border-slate-900 p-2 text-slate-800">
                                                 {route.remarks ? (

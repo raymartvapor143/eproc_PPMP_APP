@@ -168,7 +168,31 @@ class UserController extends Controller
      */
     public function getSignature(Request $request, int $id): \Symfony\Component\HttpFoundation\BinaryFileResponse|JsonResponse
     {
+        $currentUser = $request->user();
         $targetUser = User::findOrFail($id);
+
+        // Access Control: Allow self, admin, or official procurement signatories/reviewers
+        $isSelf = $currentUser->id === $targetUser->id;
+        $isAdmin = $currentUser->isAdmin();
+        $isOfficialSignatory = in_array($targetUser->role, ['head', 'budget_officer', 'oppmo', 'twg', 'admin'], true);
+
+        if (!$isSelf && !$isAdmin && !$isOfficialSignatory) {
+            // If target user is a regular end user, check if they prepared a PPMP that the current user has rights to view
+            $sharesPpmp = \App\Models\PpmpSignature::where('user_id', $targetUser->id)
+                ->whereHas('ppmp', function ($q) use ($currentUser) {
+                    if ($currentUser->isHead()) {
+                        $q->where('office_id', $currentUser->office_id);
+                    } elseif ($currentUser->isBudgetOfficer() || $currentUser->isOppmo() || $currentUser->isTwg()) {
+                        $q->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED']);
+                    } else {
+                        $q->where('created_by', $currentUser->id);
+                    }
+                })->exists();
+
+            if (!$sharesPpmp) {
+                return response()->json(['message' => 'Unauthorized. You do not have permission to view this signature.'], 403);
+            }
+        }
 
         if (!$targetUser->signature_path || !\Illuminate\Support\Facades\Storage::disk('local')->exists($targetUser->signature_path)) {
             return response()->json(['message' => 'No signature on file.'], 404);
@@ -179,6 +203,7 @@ class UserController extends Controller
         return response()->file($fullPath, [
             'Content-Type' => 'image/png',
             'Cache-Control' => 'private, max-age=3600',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 }

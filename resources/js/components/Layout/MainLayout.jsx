@@ -683,7 +683,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
 
                             <div>
                                 <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1">
-                                    Residential / Office Address
+                                    Residential
                                 </label>
                                 <div className="relative">
                                     <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-3" />

@@ -193,6 +193,7 @@ class PpmpController extends Controller
                 'status' => 'DRAFT',
                 'remarks' => 'PPMP Draft created and initialized.',
                 'submitted_at' => now(),
+                'received_at' => now(),
                 'acted_at' => now(),
             ]);
 
@@ -229,6 +230,25 @@ class PpmpController extends Controller
             'parent.office',
             'children.items',
         ])->where('uuid', $uuid)->firstOrFail();
+
+        // Enforce strict access control against IDOR / unauthorized viewing
+        if (!$user->isAdmin()) {
+            if ($user->isEndUser() && $ppmp->created_by !== $user->id && $ppmp->office_id !== $user->office_id) {
+                return response()->json(['message' => 'Unauthorized. You do not have permission to view this PPMP.'], 403);
+            }
+            if ($user->isHead() && $ppmp->office_id !== $user->office_id) {
+                return response()->json(['message' => 'Unauthorized. You may only view PPMPs from your assigned office.'], 403);
+            }
+            if ($user->isBudgetOfficer() && in_array($ppmp->status, ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'])) {
+                return response()->json(['message' => 'PPMP is not yet submitted for Budget review.'], 403);
+            }
+            if ($user->isOppmo() && in_array($ppmp->status, ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED'])) {
+                return response()->json(['message' => 'PPMP is not yet submitted for OPPMO review.'], 403);
+            }
+            if ($user->isTwg() && in_array($ppmp->status, ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED', 'OPPMO_REVIEW', 'OPPMO_RETURNED'])) {
+                return response()->json(['message' => 'PPMP is not yet submitted for BAC-TWG review.'], 403);
+            }
+        }
 
         // Recursively build full ancestor history from immediate parent down to root annual PPMP
         // Guarded with cycle detection set and maximum iteration limit to prevent infinite loops
@@ -315,6 +335,13 @@ class PpmpController extends Controller
         if (!$isCreatorEditable && !$isReviewerEditable && !$user->isAdmin()) {
             return response()->json([
                 'message' => "PPMP cannot be modified by you in its current status: {$ppmp->status}."
+            ], 403);
+        }
+
+        // Enforce Amendment Scope restriction: if scope was ATTACHMENT_LIST only, PPMP/APP items are locked
+        if ($ppmp->amendment_scope === 'ATTACHMENT_LIST' && !$user->isAdmin()) {
+            return response()->json([
+                'message' => "PPMP items and plan details cannot be modified for this revision. The approved request scope is restricted to the PPMP List of Attachment only."
             ], 403);
         }
 
@@ -440,6 +467,13 @@ class PpmpController extends Controller
         if (!$isCreatorEditable && !$isReviewerEditable && !$user->isAdmin()) {
             return response()->json([
                 'message' => "PPMP List of Attachment is locked. Once submitted for review, only the authorized reviewer can modify it."
+            ], 403);
+        }
+
+        // Enforce Amendment Scope restriction: if scope was PPMP_APP only, List of Attachment is locked
+        if ($ppmp->amendment_scope === 'PPMP_APP' && !$user->isAdmin()) {
+            return response()->json([
+                'message' => "PPMP List of Attachment cannot be modified for this revision. The approved request scope is restricted to PPMP/APP procurement items only."
             ], 403);
         }
 

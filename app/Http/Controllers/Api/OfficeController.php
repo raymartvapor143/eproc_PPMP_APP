@@ -16,7 +16,7 @@ class OfficeController extends Controller
      */
     public function index(): JsonResponse
     {
-        $offices = Office::with('head')->orderBy('name')->get();
+        $offices = Office::with(['head:id,name,designation'])->orderBy('name')->get();
         return response()->json($offices);
     }
 

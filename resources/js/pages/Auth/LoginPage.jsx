@@ -27,7 +27,9 @@ import {
     Send,
     Layers,
     Compass,
-    Maximize2
+    Maximize2,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import { SignaturePadModal } from '../../components/UI/SignaturePadModal';
 
@@ -38,11 +40,14 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
     // Login state
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showLoginPassword, setShowLoginPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMsg, setSuccessMsg] = useState('');
 
     // Register state
+    const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+    const [showRegisterConfirmPassword, setShowRegisterConfirmPassword] = useState(false);
     const [registerData, setRegisterData] = useState({
         name: '',
         email: '',
@@ -203,13 +208,54 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
         setError('');
         setSuccessMsg('');
 
-        if (registerData.password !== registerData.password_confirmation) {
-            setError('Passwords do not match.');
+        if (!registerData.name?.trim()) {
+            setError('Please enter your full official name.');
+            return;
+        }
+
+        if (!registerData.email?.trim()) {
+            setError('Please enter your official email address.');
+            return;
+        }
+
+        if (!registerData.phone_number?.trim()) {
+            setError('Please enter your contact phone number.');
+            return;
+        }
+
+        if (!registerData.address?.trim()) {
+            setError('Please enter your residential or office address.');
             return;
         }
 
         if (!registerData.office_id) {
             setError('Please select your assigned office / department.');
+            return;
+        }
+
+        if (!registerData.designation?.trim()) {
+            setError('Please enter your official position / designation.');
+            return;
+        }
+
+        if (!registerData.password) {
+            setError('Please enter your account password.');
+            return;
+        }
+
+        if (registerData.password.length < 6) {
+            setError('Password must be at least 6 characters long.');
+            return;
+        }
+
+        if (registerData.password !== registerData.password_confirmation) {
+            setError('Passwords do not match.');
+            return;
+        }
+
+        if (!hasSignature || !signatureDataUrl) {
+            setError('Please draw and capture your official specimen signature.');
+            setIsSignatureModalOpen(true);
             return;
         }
 
@@ -556,14 +602,27 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                             <input
                                                 id="login-password"
                                                 name="password"
-                                                type="password"
+                                                type={showLoginPassword ? 'text' : 'password'}
                                                 autoComplete="current-password"
                                                 required
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
                                                 placeholder="••••••••••••"
-                                                className="w-full text-xs pl-9 pr-3.5 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 focus:outline-none transition shadow-sm font-medium"
+                                                className="w-full text-xs pl-9 pr-10 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 focus:outline-none transition shadow-sm font-medium"
                                             />
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowLoginPassword(!showLoginPassword)}
+                                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer transition"
+                                                title={showLoginPassword ? 'Hide password' : 'Show password'}
+                                                tabIndex={-1}
+                                            >
+                                                {showLoginPassword ? (
+                                                    <EyeOff className="w-4 h-4 text-slate-500 hover:text-slate-700" />
+                                                ) : (
+                                                    <Eye className="w-4 h-4 text-slate-400 hover:text-slate-600" />
+                                                )}
+                                            </button>
                                         </div>
                                     </div>
 
@@ -686,7 +745,7 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                                 htmlFor="register-phone"
                                                 className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1"
                                             >
-                                                Phone Number
+                                                Phone Number <span className="text-rose-500">*</span>
                                             </label>
                                             <div className="relative group">
                                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -697,6 +756,7 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                                     name="phone_number"
                                                     type="tel"
                                                     autoComplete="tel"
+                                                    required
                                                     value={registerData.phone_number}
                                                     onChange={(e) => setRegisterData({ ...registerData, phone_number: e.target.value })}
                                                     placeholder="0912 345 6789"
@@ -711,7 +771,7 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                             htmlFor="register-address"
                                             className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1"
                                         >
-                                            Residential / Office Address
+                                            Residential / Office Address <span className="text-rose-500">*</span>
                                         </label>
                                         <div className="relative group">
                                             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -722,6 +782,7 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                                 name="address"
                                                 type="text"
                                                 autoComplete="street-address"
+                                                required
                                                 value={registerData.address}
                                                 onChange={(e) => setRegisterData({ ...registerData, address: e.target.value })}
                                                 placeholder="e.g. Digos City, Davao del Sur"
@@ -901,7 +962,7 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                                 htmlFor="register-designation"
                                                 className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1"
                                             >
-                                                Position / Designation
+                                                Position / Designation <span className="text-rose-500">*</span>
                                             </label>
                                             <div className="relative group">
                                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -911,6 +972,7 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                                     id="register-designation"
                                                     name="designation"
                                                     type="text"
+                                                    required
                                                     value={registerData.designation}
                                                     onChange={(e) => setRegisterData({ ...registerData, designation: e.target.value })}
                                                     placeholder="e.g. Admin Officer IV"
@@ -935,15 +997,28 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                                 <input
                                                     id="register-password"
                                                     name="password"
-                                                    type="password"
+                                                    type={showRegisterPassword ? 'text' : 'password'}
                                                     autoComplete="new-password"
                                                     required
                                                     minLength={6}
                                                     value={registerData.password}
                                                     onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
                                                     placeholder="Min. 6 characters"
-                                                    className="w-full text-xs pl-9 pr-3 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 focus:outline-none transition shadow-sm font-medium"
+                                                    className="w-full text-xs pl-9 pr-9 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 focus:outline-none transition shadow-sm font-medium"
                                                 />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                                                    className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer transition"
+                                                    title={showRegisterPassword ? 'Hide password' : 'Show password'}
+                                                    tabIndex={-1}
+                                                >
+                                                    {showRegisterPassword ? (
+                                                        <EyeOff className="w-3.5 h-3.5 text-slate-500 hover:text-slate-700" />
+                                                    ) : (
+                                                        <Eye className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
+                                                    )}
+                                                </button>
                                             </div>
                                         </div>
 
@@ -961,26 +1036,39 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                                 <input
                                                     id="register-password-confirmation"
                                                     name="password_confirmation"
-                                                    type="password"
+                                                    type={showRegisterConfirmPassword ? 'text' : 'password'}
                                                     autoComplete="new-password"
                                                     required
                                                     minLength={6}
                                                     value={registerData.password_confirmation}
                                                     onChange={(e) => setRegisterData({ ...registerData, password_confirmation: e.target.value })}
                                                     placeholder="Repeat password"
-                                                    className="w-full text-xs pl-9 pr-3 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 focus:outline-none transition shadow-sm font-medium"
+                                                    className="w-full text-xs pl-9 pr-9 py-2.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 focus:outline-none transition shadow-sm font-medium"
                                                 />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowRegisterConfirmPassword(!showRegisterConfirmPassword)}
+                                                    className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer transition"
+                                                    title={showRegisterConfirmPassword ? 'Hide password' : 'Show password'}
+                                                    tabIndex={-1}
+                                                >
+                                                    {showRegisterConfirmPassword ? (
+                                                        <EyeOff className="w-3.5 h-3.5 text-slate-500 hover:text-slate-700" />
+                                                    ) : (
+                                                        <Eye className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
+                                                    )}
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Digital E-Signature Specimen Card (Click to Draw in Modal) */}
+                                    {/* Digital E-Signature Specimen Card (Click to Draw in Modal - Required) */}
                                     <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 shadow-sm">
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-1.5">
                                                 <PenTool className="w-3.5 h-3.5 text-blue-600" />
                                                 <span className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                                                    Specimen Official Signature
+                                                    Specimen Official Signature <span className="text-rose-500">*</span>
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-2">
@@ -1063,7 +1151,9 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                                     </button>
                                                 </div>
                                             ) : (
-                                                <span className="text-slate-400 italic">Optional (Can be updated later)</span>
+                                                <span className="text-rose-500 font-semibold flex items-center gap-1">
+                                                    * Required for account approval
+                                                </span>
                                             )}
                                         </div>
                                     </div>

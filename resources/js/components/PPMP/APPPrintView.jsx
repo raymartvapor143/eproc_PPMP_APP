@@ -855,14 +855,14 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                 <div>
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <h2 className="text-base font-bold uppercase tracking-wide text-white">
-                                            {parentPpmp.is_annual ? 'Old / Annual Procurement Plan (APP) — Full Review' : 'Previous Procurement Plan (APP) — Full Review'}
+                                            {!parentPpmp.parent_id ? 'Old / Annual Procurement Plan (APP) — Full Review' : 'Previous Procurement Plan (APP) — Full Review'}
                                         </h2>
                                         <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded border ${
-                                            parentPpmp.is_annual
+                                            !parentPpmp.parent_id
                                                 ? 'bg-emerald-900 text-emerald-200 border-emerald-700'
                                                 : 'bg-indigo-900 text-indigo-200 border-indigo-700'
                                         }`}>
-                                            {parentPpmp.is_annual ? 'Annual Baseline' : 'Previous Baseline'}
+                                            {!parentPpmp.parent_id ? 'Annual Baseline' : 'Previous Baseline'}
                                         </span>
                                         <span className="font-mono text-xs text-slate-300 font-semibold px-2 py-0.5 bg-slate-800 rounded border border-slate-700">
                                             PPMP No. {parentPpmp.ppmp_number} ({parentPpmp.tracking_number})

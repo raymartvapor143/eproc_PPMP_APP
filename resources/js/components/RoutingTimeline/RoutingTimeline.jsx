@@ -184,7 +184,7 @@ export const RoutingTimeline = ({
                                     <div className="flex md:flex-col gap-1.5 overflow-x-auto md:overflow-y-auto max-h-36 md:max-h-none flex-1 custom-scrollbar pr-0.5">
                                         {allPpmps.map((p) => {
                                             const isSelected = p.id === activeSelectedPpmp?.id;
-                                            const isAnnual = p.is_annual || (!p.parent_id && Number(p.ppmp_number) === 0);
+                                            const isAnnual = !p.parent_id;
                                             const isCurrent = p.id === ppmp?.id;
 
                                             return (
@@ -236,73 +236,220 @@ export const RoutingTimeline = ({
                                     No routing history recorded for this version yet.
                                 </div>
                             ) : (
-                                <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+                                <div className="relative pl-6 space-y-5 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
                                     {sortedRoutes.map((route, idx) => {
-                                        const isReturned = route.status.includes('RETURNED');
-                                        const isApproved = route.status.includes('APPROVED') || route.status === 'READY_TO_PRINT';
+                                        const actionStr = route.action || '';
+                                        const statusStr = route.status || '';
                                         const isLatest = idx === 0;
+
+                                        // Classify the nature of the step
+                                        const isReceiptCard = actionStr.endsWith('_RECEIVED') || actionStr === 'ADMIN_RECEIVED_REQUEST';
+                                        const isSuspendedCard = actionStr.includes('RETURNED') || statusStr.includes('RETURNED') || actionStr.includes('REJECTED');
+                                        const isApprovedCard = !isReceiptCard && !isSuspendedCard && (actionStr.includes('APPROVED') || statusStr.includes('APPROVED') || actionStr === 'READY_TO_PRINT' || statusStr === 'READY_TO_PRINT');
+                                        const isSubmissionCard = !isReceiptCard && !isSuspendedCard && !isApprovedCard;
+
+                                        // Dot styling
+                                        let dotClass = 'bg-blue-500 ring-2 ring-blue-200';
+                                        let cardBorder = 'border-slate-200 bg-white';
+                                        let badgeColor = 'bg-blue-50 text-blue-700 border-blue-200';
+                                        let stageCategory = 'Handover / Submission';
+
+                                        if (isReceiptCard) {
+                                            dotClass = 'bg-amber-500 ring-2 ring-amber-200';
+                                            cardBorder = 'border-amber-200 bg-amber-50/30';
+                                            badgeColor = 'bg-amber-100 text-amber-800 border-amber-300';
+                                            stageCategory = 'Desk Receipt';
+                                        } else if (isSuspendedCard) {
+                                            dotClass = 'bg-rose-500 ring-2 ring-rose-200';
+                                            cardBorder = 'border-rose-200 bg-rose-50/25';
+                                            badgeColor = 'bg-rose-100 text-rose-800 border-rose-300';
+                                            stageCategory = 'Review Finding / Returned';
+                                        } else if (isApprovedCard) {
+                                            dotClass = 'bg-emerald-500 ring-2 ring-emerald-200';
+                                            cardBorder = 'border-emerald-200 bg-emerald-50/20';
+                                            badgeColor = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+                                            stageCategory = 'Approved & Released';
+                                        }
+
+                                        if (isLatest) {
+                                            cardBorder += ' ring-2 ring-indigo-500/20 shadow-sm';
+                                        }
+
+                                        // Clean readable title
+                                        const getStepTitle = () => {
+                                            switch (actionStr) {
+                                                case 'DRAFT_CREATED':
+                                                    return 'PPMP Draft Created & Initialized';
+                                                case 'SUBMITTED_TO_HEAD':
+                                                    return 'Passed & Submitted to Office Head';
+                                                case 'HEAD_RECEIVED':
+                                                    return 'Received by Office Head (Awaiting Action)';
+                                                case 'HEAD_APPROVED':
+                                                    return 'Office Head Endorsed & Approved';
+                                                case 'HEAD_RETURNED':
+                                                    return 'Suspended & Returned by Office Head';
+                                                case 'SUBMITTED_FOR_REVIEW':
+                                                    return `Passed & Submitted to ${route.to_role ? route.to_role.replace(/_/g, ' ') : 'Reviewer'} for Review`;
+                                                case 'BUDGET_RECEIVED':
+                                                    return 'Received by Provincial Budget Officer';
+                                                case 'BUDGET_APPROVED':
+                                                    return 'Budget Certified & Released to OPPMO';
+                                                case 'BUDGET_RETURNED':
+                                                    return 'Suspended & Returned by Budget Officer';
+                                                case 'OPPMO_RECEIVED':
+                                                    return 'Received by OPPMO';
+                                                case 'OPPMO_APPROVED':
+                                                    return 'OPPMO Approved & Released to BAC-TWG';
+                                                case 'OPPMO_RETURNED':
+                                                    return 'Suspended & Returned by OPPMO';
+                                                case 'TWG_RECEIVED':
+                                                    return 'Received by BAC-TWG';
+                                                case 'READY_TO_PRINT':
+                                                    return 'BAC-TWG Final Approved & Ready to Print';
+                                                case 'TWG_RETURNED':
+                                                    return 'Suspended & Returned by BAC-TWG';
+                                                case 'END_USER_RECEIVED':
+                                                    return 'Acknowledged & Received by Implementing Unit';
+                                                case 'ADMIN_RECEIVED_REQUEST':
+                                                    return 'Request Received by Administrator';
+                                                default:
+                                                    return actionStr.replace(/_/g, ' ');
+                                            }
+                                        };
 
                                         return (
                                             <div key={route.id || idx} className="relative group">
                                                 {/* Dot on timeline */}
                                                 <div
-                                                    className={`absolute -left-[27px] top-0.5 w-4 h-4 rounded-full border-2 border-white shadow-xs flex items-center justify-center ${
-                                                        isReturned
-                                                            ? 'bg-rose-500 ring-2 ring-rose-200'
-                                                            : isApproved
-                                                            ? 'bg-emerald-500 ring-2 ring-emerald-200'
-                                                            : isLatest
-                                                            ? 'bg-indigo-600 ring-2 ring-indigo-200 animate-pulse'
-                                                            : 'bg-blue-500 ring-2 ring-blue-200'
-                                                    }`}
+                                                    className={`absolute -left-[27px] top-1.5 w-4 h-4 rounded-full border-2 border-white shadow-xs flex items-center justify-center ${dotClass} ${isLatest ? 'animate-pulse' : ''}`}
                                                 />
 
-                                                <div className={`bg-slate-50 border rounded-lg p-4 hover:border-slate-300 transition ${isLatest ? 'border-indigo-300 ring-1 ring-indigo-100 shadow-xs' : 'border-slate-200'}`}>
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                            <div className="font-bold text-xs uppercase tracking-wide text-slate-800">
-                                                                {route.action.replace(/_/g, ' ')}
-                                                            </div>
-                                                            {isLatest && (
-                                                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded border border-indigo-200 uppercase tracking-tight">
-                                                                    Latest Action
+                                                <div className={`border rounded-xl p-4 transition ${cardBorder}`}>
+                                                    {/* Header with Title and Category Badge */}
+                                                    <div className="flex items-start justify-between gap-2 flex-wrap">
+                                                        <div>
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${badgeColor}`}>
+                                                                    {stageCategory}
                                                                 </span>
-                                                            )}
+                                                                {isLatest && (
+                                                                    <span className="text-[9px] font-bold px-2 py-0.5 bg-indigo-600 text-white rounded-full uppercase tracking-tight shadow-2xs">
+                                                                        Latest Event
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <h4 className="mt-1.5 font-bold text-xs uppercase tracking-wide text-slate-900">
+                                                                {getStepTitle()}
+                                                            </h4>
                                                         </div>
-                                                        <span className="text-[10px] font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200 shrink-0">
+                                                        <span className="text-[10px] font-mono font-medium text-slate-500 bg-white px-2 py-1 rounded-md border border-slate-200 shrink-0">
                                                             {formatDate(route.acted_at || route.submitted_at || route.created_at)}
                                                         </span>
                                                     </div>
 
-                                                    <div className="mt-1.5 flex items-center gap-2 text-xs text-slate-600">
-                                                        <span className="font-semibold text-slate-900">
-                                                            {route.from_user?.name || route.from_role}
-                                                        </span>
-                                                        <span className="text-slate-400 font-mono">→</span>
-                                                        <span className="font-semibold text-slate-900">
-                                                            {route.to_user?.name || route.to_role}
-                                                        </span>
-                                                    </div>
-
-                                                    {/* Timestamps breakdown */}
-                                                    <div className="mt-2.5 pt-2 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-slate-500">
-                                                        <div>
-                                                            <span className="font-semibold text-slate-700">Submitted:</span>{' '}
-                                                            {formatDate(route.submitted_at)}
+                                                    {/* Routing Flow / Custody movement */}
+                                                    <div className="mt-2.5 p-2 bg-slate-50/80 rounded-lg border border-slate-200/80 flex items-center justify-between gap-2 text-xs">
+                                                        <div className="truncate">
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Origin / Handled By</span>
+                                                            <span className="font-semibold text-slate-900 truncate block">
+                                                                {route.from_user?.name || route.from_role?.replace(/_/g, ' ')}
+                                                            </span>
+                                                            <span className="text-[10px] text-slate-500 block truncate">
+                                                                {route.from_user?.designation || `Role: ${route.from_role?.replace(/_/g, ' ')}`}
+                                                            </span>
                                                         </div>
-                                                        <div>
-                                                            <span className="font-semibold text-slate-700">Received:</span>{' '}
-                                                            {route.received_at ? (
-                                                                formatDate(route.received_at)
-                                                            ) : (
-                                                                <span className="text-amber-600 font-medium italic">Pending Receipt</span>
-                                                            )}
+                                                        <span className="text-slate-400 font-bold px-1.5">→</span>
+                                                        <div className="text-right truncate">
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Recipient / Next Office</span>
+                                                            <span className="font-semibold text-slate-900 truncate block">
+                                                                {route.to_user?.name || route.to_role?.replace(/_/g, ' ')}
+                                                            </span>
+                                                            <span className="text-[10px] text-slate-500 block truncate">
+                                                                {route.to_user?.designation || `Role: ${route.to_role?.replace(/_/g, ' ')}`}
+                                                            </span>
                                                         </div>
                                                     </div>
 
-                                                    {/* Remarks if any */}
+                                                    {/* Contextual Timestamps Breakdown */}
+                                                    <div className="mt-3 pt-2.5 border-t border-slate-200/80">
+                                                        {isReceiptCard ? (
+                                                            // Receipt Card breakdown
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                                                <div className="p-2 bg-amber-50/60 rounded border border-amber-200/70">
+                                                                    <span className="font-bold text-amber-900 block">Date & Time Received in Office:</span>
+                                                                    <span className="font-mono text-amber-950 font-semibold">
+                                                                        {formatDate(route.received_at || route.submitted_at || route.acted_at)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="p-2 bg-slate-50 rounded border border-slate-200 flex flex-col justify-center">
+                                                                    <span className="font-bold text-slate-600 block">Document Custody Status:</span>
+                                                                    <span className="text-emerald-700 font-semibold">Under Active Review</span>
+                                                                </div>
+                                                            </div>
+                                                        ) : isApprovedCard ? (
+                                                            // Approved & Released Card breakdown
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                                                <div className="p-2 bg-emerald-50/60 rounded border border-emerald-200/70">
+                                                                    <span className="font-bold text-emerald-900 block">Date & Time Approved:</span>
+                                                                    <span className="font-mono text-emerald-950 font-semibold">
+                                                                        {formatDate(route.acted_at || route.submitted_at)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="p-2 bg-blue-50/60 rounded border border-blue-200/70">
+                                                                    <span className="font-bold text-blue-900 block">Forwarded / Released To:</span>
+                                                                    <span className="font-semibold text-blue-950 truncate block">
+                                                                        {route.to_user?.name || route.to_role?.replace(/_/g, ' ')}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-blue-700 font-mono">
+                                                                        {route.received_at ? `Received: ${formatDate(route.received_at)}` : 'Pending office receipt'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        ) : isSuspendedCard ? (
+                                                            // Suspended / Returned Card breakdown
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                                                <div className="p-2 bg-rose-50/60 rounded border border-rose-200/70">
+                                                                    <span className="font-bold text-rose-900 block">Date & Time Suspended / Returned:</span>
+                                                                    <span className="font-mono text-rose-950 font-semibold">
+                                                                        {formatDate(route.acted_at || route.submitted_at)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="p-2 bg-slate-50 rounded border border-slate-200 flex flex-col justify-center">
+                                                                    <span className="font-bold text-slate-600 block">Return Target:</span>
+                                                                    <span className="text-slate-900 font-semibold">Returned to Implementing Unit</span>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            // Submission / Transfer Card breakdown
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                                                <div className="p-2 bg-blue-50/60 rounded border border-blue-200/70">
+                                                                    <span className="font-bold text-blue-900 block">Date & Time Dispatched / Submitted:</span>
+                                                                    <span className="font-mono text-blue-950 font-semibold">
+                                                                        {formatDate(route.submitted_at || route.created_at)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                                                                    <span className="font-bold text-slate-700 block">Office Receipt Acknowledgment:</span>
+                                                                    {route.received_at ? (
+                                                                        <span className="text-emerald-700 font-semibold font-mono">
+                                                                            Received: {formatDate(route.received_at)}
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="text-amber-600 font-semibold italic">
+                                                                            Pending Receipt by Recipient
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Action Remarks / Justification */}
                                                     {route.remarks && (
-                                                        <div className="mt-2.5 p-2.5 bg-white rounded border border-slate-200 text-xs text-slate-700 italic">
+                                                        <div className="mt-3 p-2.5 bg-white rounded-lg border border-slate-200 text-xs text-slate-700 italic">
+                                                            <span className="not-italic font-bold text-slate-500 text-[10px] uppercase tracking-wider block mb-0.5">
+                                                                Remarks / Instructions:
+                                                            </span>
                                                             "{route.remarks}"
                                                         </div>
                                                     )}

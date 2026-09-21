@@ -89,8 +89,13 @@ class PpmpWorkflowController extends Controller
         $user = $request->user();
         $ppmp = Ppmp::where('uuid', $uuid)->firstOrFail();
 
-        if (!$user->isHead() && !$user->isAdmin()) {
-            return response()->json(['message' => 'Only the Office Head or Administrator can approve this PPMP.'], 403);
+        if (!$user->isAdmin()) {
+            if (!$user->isHead()) {
+                return response()->json(['message' => 'Only the Office Head or Administrator can approve this PPMP.'], 403);
+            }
+            if ($user->office_id !== $ppmp->office_id) {
+                return response()->json(['message' => 'Unauthorized. You may only approve PPMPs from your assigned office.'], 403);
+            }
         }
 
         if ($ppmp->status !== 'HEAD_PENDING') {
@@ -99,13 +104,17 @@ class PpmpWorkflowController extends Controller
 
         DB::transaction(function () use ($ppmp, $user) {
             $now = now();
+            $receivedAt = $ppmp->head_received_at ?? $now;
 
             $ppmp->update([
                 'status' => 'HEAD_APPROVED',
                 'head_approved_at' => $now,
-                'head_received_at' => $ppmp->head_received_at ?? $now,
+                'head_received_at' => $receivedAt,
                 'enduser_received_at' => null, // Creator receives notification and document
             ]);
+
+            // Mark the incoming submission route as received
+            $this->markLatestPendingRouteReceived($ppmp->id, $receivedAt);
 
             // Create Head Electronic Signature Indicator
             PpmpSignature::updateOrCreate(
@@ -130,7 +139,7 @@ class PpmpWorkflowController extends Controller
                 'status_before' => 'HEAD_PENDING',
                 'status_after' => 'HEAD_APPROVED',
                 'submitted_at' => $ppmp->head_submitted_at ?? $now,
-                'received_at' => $ppmp->head_received_at ?? $now,
+                'received_at' => $receivedAt,
                 'acted_at' => $now,
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
@@ -176,8 +185,13 @@ class PpmpWorkflowController extends Controller
         $user = $request->user();
         $ppmp = Ppmp::where('uuid', $uuid)->firstOrFail();
 
-        if (!$user->isHead() && !$user->isAdmin()) {
-            return response()->json(['message' => 'Only the Office Head or Administrator can return this PPMP.'], 403);
+        if (!$user->isAdmin()) {
+            if (!$user->isHead()) {
+                return response()->json(['message' => 'Only the Office Head or Administrator can return this PPMP.'], 403);
+            }
+            if ($user->office_id !== $ppmp->office_id) {
+                return response()->json(['message' => 'Unauthorized. You may only return PPMPs from your assigned office.'], 403);
+            }
         }
 
         if ($ppmp->status !== 'HEAD_PENDING') {
@@ -191,11 +205,15 @@ class PpmpWorkflowController extends Controller
 
         DB::transaction(function () use ($ppmp, $user, $validated) {
             $now = now();
+            $receivedAt = $ppmp->head_received_at ?? $now;
 
             $ppmp->update([
                 'status' => 'HEAD_RETURNED',
                 'enduser_received_at' => null,
             ]);
+
+            // Mark the incoming route as received
+            $this->markLatestPendingRouteReceived($ppmp->id, $receivedAt);
 
             // Save any field modifications
             $this->applyFieldModifications($ppmp, $validated['field_changes'] ?? [], $user, 'head');
@@ -209,7 +227,7 @@ class PpmpWorkflowController extends Controller
                 'status_before' => 'HEAD_PENDING',
                 'status_after' => 'HEAD_RETURNED',
                 'submitted_at' => $ppmp->head_submitted_at ?? $now,
-                'received_at' => $ppmp->head_received_at ?? $now,
+                'received_at' => $receivedAt,
                 'acted_at' => $now,
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
@@ -284,6 +302,10 @@ class PpmpWorkflowController extends Controller
 
         DB::transaction(function () use ($ppmp, $user, $nextStatus, $nextRole) {
             $now = now();
+            $receivedAt = $ppmp->enduser_received_at ?? $now;
+
+            // Mark the returned / head approved route to end_user as received
+            $this->markLatestPendingRouteReceived($ppmp->id, $receivedAt);
 
             $updateData = [
                 'status' => $nextStatus,
@@ -352,13 +374,17 @@ class PpmpWorkflowController extends Controller
 
         DB::transaction(function () use ($ppmp, $user) {
             $now = now();
+            $receivedAt = $ppmp->budget_received_at ?? $now;
 
             $ppmp->update([
                 'status' => 'OPPMO_REVIEW',
                 'budget_approved_at' => $now,
-                'budget_received_at' => $ppmp->budget_received_at ?? $now,
+                'budget_received_at' => $receivedAt,
                 'oppmo_received_at' => null, // Next reviewer must receive
             ]);
+
+            // Mark the incoming submission route as received
+            $this->markLatestPendingRouteReceived($ppmp->id, $receivedAt);
 
             PpmpSignature::updateOrCreate(
                 ['ppmp_id' => $ppmp->id, 'role' => 'budget_officer'],
@@ -381,7 +407,7 @@ class PpmpWorkflowController extends Controller
                 'status_before' => 'BUDGET_OFFICER_REVIEW',
                 'status_after' => 'OPPMO_REVIEW',
                 'submitted_at' => $ppmp->review_submitted_at ?? $now,
-                'received_at' => $ppmp->budget_received_at ?? $now,
+                'received_at' => $receivedAt,
                 'acted_at' => $now,
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
@@ -445,11 +471,15 @@ class PpmpWorkflowController extends Controller
 
         DB::transaction(function () use ($ppmp, $user, $validated) {
             $now = now();
+            $receivedAt = $ppmp->budget_received_at ?? $now;
 
             $ppmp->update([
                 'status' => 'BUDGET_OFFICER_RETURNED',
                 'enduser_received_at' => null,
             ]);
+
+            // Mark incoming route as received
+            $this->markLatestPendingRouteReceived($ppmp->id, $receivedAt);
 
             $this->applyFieldModifications($ppmp, $validated['field_changes'] ?? [], $user, 'budget_officer');
 
@@ -462,7 +492,7 @@ class PpmpWorkflowController extends Controller
                 'status_before' => 'BUDGET_OFFICER_REVIEW',
                 'status_after' => 'BUDGET_OFFICER_RETURNED',
                 'submitted_at' => $ppmp->review_submitted_at ?? $now,
-                'received_at' => $ppmp->budget_received_at ?? $now,
+                'received_at' => $receivedAt,
                 'acted_at' => $now,
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
@@ -517,13 +547,17 @@ class PpmpWorkflowController extends Controller
 
         DB::transaction(function () use ($ppmp, $user) {
             $now = now();
+            $receivedAt = $ppmp->oppmo_received_at ?? $now;
 
             $ppmp->update([
                 'status' => 'TWG_REVIEW',
                 'oppmo_approved_at' => $now,
-                'oppmo_received_at' => $ppmp->oppmo_received_at ?? $now,
+                'oppmo_received_at' => $receivedAt,
                 'twg_received_at' => null,
             ]);
+
+            // Mark incoming route as received
+            $this->markLatestPendingRouteReceived($ppmp->id, $receivedAt);
 
             PpmpSignature::updateOrCreate(
                 ['ppmp_id' => $ppmp->id, 'role' => 'oppmo'],
@@ -546,7 +580,7 @@ class PpmpWorkflowController extends Controller
                 'status_before' => 'OPPMO_REVIEW',
                 'status_after' => 'TWG_REVIEW',
                 'submitted_at' => $ppmp->budget_approved_at ?? $now,
-                'received_at' => $ppmp->oppmo_received_at ?? $now,
+                'received_at' => $receivedAt,
                 'acted_at' => $now,
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
@@ -610,11 +644,15 @@ class PpmpWorkflowController extends Controller
 
         DB::transaction(function () use ($ppmp, $user, $validated) {
             $now = now();
+            $receivedAt = $ppmp->oppmo_received_at ?? $now;
 
             $ppmp->update([
                 'status' => 'OPPMO_RETURNED',
                 'enduser_received_at' => null,
             ]);
+
+            // Mark incoming route as received
+            $this->markLatestPendingRouteReceived($ppmp->id, $receivedAt);
 
             $this->applyFieldModifications($ppmp, $validated['field_changes'] ?? [], $user, 'oppmo');
 
@@ -627,7 +665,7 @@ class PpmpWorkflowController extends Controller
                 'status_before' => 'OPPMO_REVIEW',
                 'status_after' => 'OPPMO_RETURNED',
                 'submitted_at' => $ppmp->budget_approved_at ?? $now,
-                'received_at' => $ppmp->oppmo_received_at ?? $now,
+                'received_at' => $receivedAt,
                 'acted_at' => $now,
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
@@ -682,14 +720,18 @@ class PpmpWorkflowController extends Controller
 
         DB::transaction(function () use ($ppmp, $user) {
             $now = now();
+            $receivedAt = $ppmp->twg_received_at ?? $now;
 
             $ppmp->update([
                 'status' => 'READY_TO_PRINT',
                 'twg_approved_at' => $now,
-                'twg_received_at' => $ppmp->twg_received_at ?? $now,
+                'twg_received_at' => $receivedAt,
                 'ready_to_print_at' => $now,
                 'enduser_received_at' => null,
             ]);
+
+            // Mark incoming route as received
+            $this->markLatestPendingRouteReceived($ppmp->id, $receivedAt);
 
             PpmpSignature::updateOrCreate(
                 ['ppmp_id' => $ppmp->id, 'role' => 'twg'],
@@ -712,7 +754,7 @@ class PpmpWorkflowController extends Controller
                 'status_before' => 'TWG_REVIEW',
                 'status_after' => 'READY_TO_PRINT',
                 'submitted_at' => $ppmp->oppmo_approved_at ?? $now,
-                'received_at' => $ppmp->twg_received_at ?? $now,
+                'received_at' => $receivedAt,
                 'acted_at' => $now,
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
@@ -772,11 +814,15 @@ class PpmpWorkflowController extends Controller
 
         DB::transaction(function () use ($ppmp, $user, $validated) {
             $now = now();
+            $receivedAt = $ppmp->twg_received_at ?? $now;
 
             $ppmp->update([
                 'status' => 'TWG_RETURNED',
                 'enduser_received_at' => null,
             ]);
+
+            // Mark incoming route as received
+            $this->markLatestPendingRouteReceived($ppmp->id, $receivedAt);
 
             $this->applyFieldModifications($ppmp, $validated['field_changes'] ?? [], $user, 'twg');
 
@@ -789,7 +835,7 @@ class PpmpWorkflowController extends Controller
                 'status_before' => 'TWG_REVIEW',
                 'status_after' => 'TWG_RETURNED',
                 'submitted_at' => $ppmp->oppmo_approved_at ?? $now,
-                'received_at' => $ppmp->twg_received_at ?? $now,
+                'received_at' => $receivedAt,
                 'acted_at' => $now,
                 'ip_address' => request()->ip(),
                 'user_agent' => request()->userAgent(),
@@ -841,6 +887,8 @@ class PpmpWorkflowController extends Controller
             $ppmp->update(['admin_received_at' => $now]);
             $updated = true;
 
+            $this->markLatestPendingRouteReceived($ppmp->id, $now);
+
             PpmpRoute::create([
                 'ppmp_id' => $ppmp->id,
                 'from_user_id' => $user->id,
@@ -851,19 +899,80 @@ class PpmpWorkflowController extends Controller
                 'status' => $ppmp->status,
                 'remarks' => 'Supplemental/Amendment request formally received by Administrator.',
                 'submitted_at' => $now,
+                'received_at' => $now,
                 'acted_at' => $now,
             ]);
-        } elseif ($ppmp->status === 'HEAD_PENDING' && ($user->isHead() || $user->isAdmin())) {
+        } elseif ($ppmp->status === 'HEAD_PENDING' && (($user->isHead() && $user->office_id === $ppmp->office_id) || $user->isAdmin())) {
             $ppmp->update(['head_received_at' => $now]);
+            $this->markLatestPendingRouteReceived($ppmp->id, $now);
+
+            PpmpRoute::create([
+                'ppmp_id' => $ppmp->id,
+                'from_user_id' => $user->id,
+                'to_user_id' => $user->id,
+                'from_role' => 'head',
+                'to_role' => 'head',
+                'action' => 'HEAD_RECEIVED',
+                'status' => 'HEAD_PENDING',
+                'remarks' => 'PPMP document received and under Office Head review.',
+                'submitted_at' => $now,
+                'received_at' => $now,
+                'acted_at' => $now,
+            ]);
             $updated = true;
         } elseif ($ppmp->status === 'BUDGET_OFFICER_REVIEW' && ($user->isBudgetOfficer() || $user->isAdmin())) {
             $ppmp->update(['budget_received_at' => $now]);
+            $this->markLatestPendingRouteReceived($ppmp->id, $now);
+
+            PpmpRoute::create([
+                'ppmp_id' => $ppmp->id,
+                'from_user_id' => $user->id,
+                'to_user_id' => $user->id,
+                'from_role' => 'budget_officer',
+                'to_role' => 'budget_officer',
+                'action' => 'BUDGET_RECEIVED',
+                'status' => 'BUDGET_OFFICER_REVIEW',
+                'remarks' => 'PPMP document received and under Provincial Budget Officer review.',
+                'submitted_at' => $now,
+                'received_at' => $now,
+                'acted_at' => $now,
+            ]);
             $updated = true;
         } elseif ($ppmp->status === 'OPPMO_REVIEW' && ($user->isOppmo() || $user->isAdmin())) {
             $ppmp->update(['oppmo_received_at' => $now]);
+            $this->markLatestPendingRouteReceived($ppmp->id, $now);
+
+            PpmpRoute::create([
+                'ppmp_id' => $ppmp->id,
+                'from_user_id' => $user->id,
+                'to_user_id' => $user->id,
+                'from_role' => 'oppmo',
+                'to_role' => 'oppmo',
+                'action' => 'OPPMO_RECEIVED',
+                'status' => 'OPPMO_REVIEW',
+                'remarks' => 'PPMP document received and under OPPMO review.',
+                'submitted_at' => $now,
+                'received_at' => $now,
+                'acted_at' => $now,
+            ]);
             $updated = true;
         } elseif ($ppmp->status === 'TWG_REVIEW' && ($user->isTwg() || $user->isAdmin())) {
             $ppmp->update(['twg_received_at' => $now]);
+            $this->markLatestPendingRouteReceived($ppmp->id, $now);
+
+            PpmpRoute::create([
+                'ppmp_id' => $ppmp->id,
+                'from_user_id' => $user->id,
+                'to_user_id' => $user->id,
+                'from_role' => 'twg',
+                'to_role' => 'twg',
+                'action' => 'TWG_RECEIVED',
+                'status' => 'TWG_REVIEW',
+                'remarks' => 'PPMP document received and under BAC-TWG technical review.',
+                'submitted_at' => $now,
+                'received_at' => $now,
+                'acted_at' => $now,
+            ]);
             $updated = true;
         } elseif (in_array($ppmp->status, [
             'HEAD_APPROVED',
@@ -874,6 +983,21 @@ class PpmpWorkflowController extends Controller
             'TWG_RETURNED'
         ]) && ($ppmp->created_by === $user->id || $user->isAdmin())) {
             $ppmp->update(['enduser_received_at' => $now]);
+            $this->markLatestPendingRouteReceived($ppmp->id, $now);
+
+            PpmpRoute::create([
+                'ppmp_id' => $ppmp->id,
+                'from_user_id' => $user->id,
+                'to_user_id' => $user->id,
+                'from_role' => 'end_user',
+                'to_role' => 'end_user',
+                'action' => 'END_USER_RECEIVED',
+                'status' => $ppmp->status,
+                'remarks' => 'PPMP document acknowledged and received by Implementing Unit.',
+                'submitted_at' => $now,
+                'received_at' => $now,
+                'acted_at' => $now,
+            ]);
             $updated = true;
         }
 
@@ -887,6 +1011,22 @@ class PpmpWorkflowController extends Controller
             'message' => 'Document received successfully.',
             'ppmp' => $ppmp->fresh(['office.head', 'creator', 'signatures.user', 'routes.fromUser', 'routes.toUser']),
         ]);
+    }
+
+    /**
+     * Mark the most recent route awaiting receipt for a PPMP as received
+     */
+    private function markLatestPendingRouteReceived(int $ppmpId, $timestamp = null): void
+    {
+        $timestamp = $timestamp ?? now();
+        $pendingRoute = PpmpRoute::where('ppmp_id', $ppmpId)
+            ->whereNull('received_at')
+            ->latest('id')
+            ->first();
+
+        if ($pendingRoute) {
+            $pendingRoute->update(['received_at' => $timestamp]);
+        }
     }
 
     /**
@@ -910,10 +1050,14 @@ class PpmpWorkflowController extends Controller
         }
 
         $validated = $request->validate([
-            'request_type' => 'required|in:SUPPLEMENTAL,AMENDMENT',
+            'request_scope' => 'nullable|in:PPMP_APP,ATTACHMENT_LIST,ALL',
+            'request_type' => 'nullable|in:SUPPLEMENTAL,AMENDMENT,ATTACHMENT_LIST',
             'reason' => 'required|string|min:5|max:2000',
             'letter_file' => 'required|file|mimes:pdf|max:20480',
         ]);
+
+        $scope = $validated['request_scope'] ?? 'PPMP_APP';
+        $type = $validated['request_type'] ?? ($scope === 'ATTACHMENT_LIST' ? 'ATTACHMENT_LIST' : 'SUPPLEMENTAL');
 
         $uploadedFile = $request->file('letter_file');
         
@@ -927,7 +1071,7 @@ class PpmpWorkflowController extends Controller
 
         $now = now();
 
-        $ppmp = DB::transaction(function () use ($ppmp, $user, $validated, $uploadedFile, $now) {
+        $ppmp = DB::transaction(function () use ($ppmp, $user, $validated, $uploadedFile, $scope, $type, $now) {
             // Save request letter in private disk
             $internalFilename = (string) Str::uuid() . '.pdf';
             $directory = 'ppmp/' . $ppmp->id;
@@ -947,13 +1091,26 @@ class PpmpWorkflowController extends Controller
 
             $ppmp->update([
                 'amendment_status' => 'PENDING_APPROVAL',
-                'amendment_type' => $validated['request_type'],
+                'amendment_type' => $type,
+                'amendment_scope' => $scope,
                 'amendment_reason' => $validated['reason'],
-                'requested_amendment_type' => $validated['request_type'],
+                'requested_amendment_type' => $type,
+                'requested_amendment_scope' => $scope,
                 'requested_amendment_reason' => $validated['reason'],
                 'amendment_requested_at' => $now,
                 'admin_received_at' => null, // Admin needs to receive request
             ]);
+
+            $scopeLabel = match ($scope) {
+                'PPMP_APP' => 'PPMP / APP Only',
+                'ATTACHMENT_LIST' => 'PPMP List of Attachment Only',
+                default => 'PPMP / APP & List of Attachment',
+            };
+            $typeLabel = match ($type) {
+                'SUPPLEMENTAL' => 'Supplemental',
+                'AMENDMENT' => 'Amendment',
+                default => 'List of Attachment Update',
+            };
 
             PpmpRoute::create([
                 'ppmp_id' => $ppmp->id,
@@ -961,9 +1118,9 @@ class PpmpWorkflowController extends Controller
                 'to_user_id' => null,
                 'from_role' => 'end_user',
                 'to_role' => 'admin',
-                'action' => 'REQUESTED_' . $validated['request_type'],
+                'action' => 'REQUESTED_' . $type,
                 'status' => $ppmp->status,
-                'remarks' => "Requested {$validated['request_type']}: {$validated['reason']}\nAttached Letter: {$attachment->original_filename}",
+                'remarks' => "Requested {$typeLabel} [Scope: {$scopeLabel}]: {$validated['reason']}\nAttached Letter: {$attachment->original_filename}",
                 'submitted_at' => $now,
             ]);
 
@@ -972,15 +1129,16 @@ class PpmpWorkflowController extends Controller
             foreach ($admins as $admin) {
                 SystemNotification::notify(
                     $admin->id,
-                    "New {$validated['request_type']} Request",
-                    "Office '{$ppmp->office?->name}' requested a {$validated['request_type']} for PPMP No. {$ppmp->ppmp_number}.",
+                    "New {$typeLabel} Request",
+                    "Office '{$ppmp->office?->name}' requested a {$typeLabel} ({$scopeLabel}) for PPMP No. {$ppmp->ppmp_number}.",
                     $ppmp->id,
                     'info'
                 );
             }
 
             AuditLog::log('PPMP_AMENDMENT_REQUESTED', 'ppmps', $ppmp->id, null, [
-                'type' => $validated['request_type'],
+                'type' => $type,
+                'scope' => $scope,
                 'reason' => $validated['reason'],
                 'attachment_id' => $attachment->id,
             ], $user->id);
@@ -1012,20 +1170,20 @@ class PpmpWorkflowController extends Controller
         }
 
         $type = $ppmp->requested_amendment_type ?: $ppmp->amendment_type ?: 'SUPPLEMENTAL';
+        $scope = $ppmp->requested_amendment_scope ?: $ppmp->amendment_scope ?: 'ALL';
         $reason = $ppmp->requested_amendment_reason ?: $ppmp->amendment_reason;
         $now = now();
 
-        $newPpmp = DB::transaction(function () use ($ppmp, $admin, $type, $reason, $now) {
-            // Current PPMP is finalized as baseline/annual
+        $newPpmp = DB::transaction(function () use ($ppmp, $admin, $type, $scope, $reason, $now) {
+            // Update amendment status on the baseline PPMP (only the root PPMP with no parent_id is the Annual PPMP)
             $ppmp->update([
                 'amendment_status' => 'APPROVED',
                 'amendment_approved_at' => $now,
-                'is_annual' => true,
+                'is_annual' => empty($ppmp->parent_id),
             ]);
 
-            // Calculate next PPMP number (e.g. 0 -> 1, 1 -> 2)
-            $currentNum = (int) $ppmp->ppmp_number;
-            $nextNum = (string) ($currentNum + 1);
+            // Preserve the existing PPMP number without auto-incrementing (+1); end user will manually edit PPMP No. if needed
+            $ppmpNumber = $ppmp->ppmp_number;
 
             // Keep the exact same tracker number across amendments/supplementals
             $trackingNumber = $ppmp->tracking_number;
@@ -1034,7 +1192,7 @@ class PpmpWorkflowController extends Controller
                 'uuid' => (string) Str::uuid(),
                 'parent_id' => $ppmp->id,
                 'tracking_number' => $trackingNumber,
-                'ppmp_number' => $nextNum,
+                'ppmp_number' => $ppmpNumber,
                 'office_id' => $ppmp->office_id,
                 'implementing_unit' => $ppmp->implementing_unit,
                 'created_by' => $ppmp->created_by,
@@ -1053,6 +1211,7 @@ class PpmpWorkflowController extends Controller
                 'status' => 'DRAFT',
                 'amendment_status' => null,
                 'amendment_type' => $type,
+                'amendment_scope' => $scope,
                 'amendment_reason' => $reason,
                 'prepared_at' => $now,
             ]);
@@ -1101,7 +1260,25 @@ class PpmpWorkflowController extends Controller
                 }
             }
 
+            // If scope does NOT modify List of Attachment (e.g. PPMP_APP only),
+            // copy/link the approved parent signatures so the unchanged List of Attachment maintains its valid e-signatures
+            if ($scope === 'PPMP_APP') {
+                foreach ($ppmp->signatures as $sig) {
+                    $newSig = $sig->replicate();
+                    $newSig->ppmp_id = $childPpmp->id;
+                    $newSig->save();
+                }
+            }
+
+            $scopeLabel = match ($scope) {
+                'PPMP_APP' => 'PPMP/APP Only',
+                'ATTACHMENT_LIST' => 'List of Attachment Only',
+                default => 'PPMP/APP & List of Attachment',
+            };
+
             // Route log on parent
+            $this->markLatestPendingRouteReceived($ppmp->id, $ppmp->admin_received_at ?? $now);
+
             PpmpRoute::create([
                 'ppmp_id' => $ppmp->id,
                 'from_user_id' => $admin->id,
@@ -1110,7 +1287,7 @@ class PpmpWorkflowController extends Controller
                 'to_role' => 'end_user',
                 'action' => 'ADMIN_APPROVED_' . $type,
                 'status' => $ppmp->status,
-                'remarks' => "{$type} approved by Administrator. Generated new PPMP No. {$nextNum} in DRAFT.",
+                'remarks' => "{$type} ({$scopeLabel}) approved by Administrator. Created revision in DRAFT.",
                 'submitted_at' => $now,
                 'acted_at' => $now,
             ]);
@@ -1124,8 +1301,9 @@ class PpmpWorkflowController extends Controller
                 'to_role' => 'end_user',
                 'action' => 'DRAFT_CREATED',
                 'status' => 'DRAFT',
-                'remarks' => "Created from approved {$type} request (Previous Baseline: PPMP No. {$ppmp->ppmp_number}).",
+                'remarks' => "Created from approved {$type} request [Scope: {$scopeLabel}] (Previous Baseline: PPMP No. {$ppmp->ppmp_number}).",
                 'submitted_at' => $now,
+                'received_at' => $now,
                 'acted_at' => $now,
             ]);
 
@@ -1133,7 +1311,7 @@ class PpmpWorkflowController extends Controller
             SystemNotification::notify(
                 $ppmp->created_by,
                 "{$type} Request Approved",
-                "Your {$type} request for PPMP No. {$ppmp->ppmp_number} was approved! A new version (PPMP No. {$nextNum}) has been created in DRAFT for you to edit.",
+                "Your {$type} request ({$scopeLabel}) for PPMP No. {$ppmp->ppmp_number} was approved! A revision has been reopened in DRAFT for you to edit.",
                 $childPpmp->id,
                 'success'
             );
@@ -1177,6 +1355,8 @@ class PpmpWorkflowController extends Controller
         $type = $ppmp->requested_amendment_type ?: $ppmp->amendment_type ?: 'Request';
 
         DB::transaction(function () use ($ppmp, $admin, $validated, $now, $type) {
+            $this->markLatestPendingRouteReceived($ppmp->id, $ppmp->admin_received_at ?? $now);
+
             $ppmp->update([
                 'amendment_status' => 'REJECTED',
             ]);
