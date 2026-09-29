@@ -35,11 +35,14 @@ export const ReviewPanel = ({
 
     // Determine current reviewer role vs PPMP status (Admin can also act on behalf of the stage)
     const isAdmin = userRole === 'admin' || user?.role === 'admin';
-    const effectiveRole = isAdmin && targetStageRole ? targetStageRole : userRole;
+    let effectiveRole = isAdmin && targetStageRole ? targetStageRole : userRole;
+    if (effectiveRole === 'authorized_staff') {
+        effectiveRole = 'head';
+    }
 
     const canReview = Boolean(
         targetStageRole && (
-            (userRole === 'head' && ppmp.status === 'HEAD_PENDING' && (user?.office_id === ppmp.office_id || !ppmp.office_id)) ||
+            ((userRole === 'head' || userRole === 'authorized_staff') && ppmp.status === 'HEAD_PENDING' && (user?.office_id === ppmp.office_id || !ppmp.office_id)) ||
             (userRole === 'budget_officer' && ppmp.status === 'BUDGET_OFFICER_REVIEW') ||
             (userRole === 'oppmo' && ppmp.status === 'OPPMO_REVIEW') ||
             (userRole === 'twg' && ppmp.status === 'TWG_REVIEW') ||
@@ -54,7 +57,9 @@ export const ReviewPanel = ({
         } else if (effectiveRole === 'budget_officer') {
             confirmText = 'Are you sure you want to certify budgetary requirements? Initial indicator will be affixed and this PPMP will automatically route to OPPMO.';
         } else if (effectiveRole === 'oppmo') {
-            confirmText = 'Are you sure you want to approve this PPMP? Initial indicator will be affixed and this PPMP will automatically route to TWG.';
+            confirmText = ppmp?.amendment_scope === 'PPMP_APP'
+                ? 'Are you sure you want to approve this PPMP? Initial indicator will be affixed and this PPMP will be finalized and marked READY TO PRINT.'
+                : 'Are you sure you want to approve this PPMP? Initial indicator will be affixed and this PPMP will automatically route to TWG.';
         } else if (effectiveRole === 'twg') {
             confirmText = 'Are you sure you want to grant final TWG technical approval? This will mark the PPMP as READY TO PRINT.';
         }

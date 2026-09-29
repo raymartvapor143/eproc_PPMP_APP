@@ -128,7 +128,7 @@ export const AttachmentUploader = ({
                                     <span className="text-blue-600">({currentAttachments.length})</span>
                                 </div>
                             )}
-                            <ul className="space-y-2">
+                            <ul className={`space-y-2 ${currentAttachments.length > 3 ? 'max-h-[195px] overflow-y-auto pr-1.5 custom-scrollbar' : ''}`}>
                                 {currentAttachments.map((att) => {
                                     const isImg = isImageFile(att.mime_type, att.original_filename);
                                     const fileKey = att.encrypted_uuid || att.uuid;
@@ -211,7 +211,7 @@ export const AttachmentUploader = ({
                                 </div>
                                 <span className="text-[9px] text-slate-400 normal-case">Preserved baseline documents</span>
                             </div>
-                            <ul className="space-y-2">
+                            <ul className={`space-y-2 ${historicalAttachments.length > 3 ? 'max-h-[195px] overflow-y-auto pr-1.5 custom-scrollbar' : ''}`}>
                                 {historicalAttachments.map((att) => {
                                     const isImg = isImageFile(att.mime_type, att.original_filename);
                                     const sourcePpmp = att._sourcePpmp;

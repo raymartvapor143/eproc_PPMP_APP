@@ -59,14 +59,33 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, onBack, onG
     });
 
     // Signers initialized with PPMP signatories or fallback to parent signatories if amended scope is PPMP/APP only
-    const signatures = (ppmp?.signatures && ppmp.signatures.length > 0)
-        ? ppmp.signatures
-        : ((ppmp?.amendment_scope === 'PPMP_APP' && ppmp?.parent?.signatures && ppmp.parent.signatures.length > 0)
-            ? ppmp.parent.signatures
-            : []);
-    const preparedSig = signatures.find(s => s.role === 'end_user');
-    const headSig = signatures.find(s => s.role === 'head');
-    const twgSig = signatures.find(s => s.role === 'twg');
+    const isAttachmentAmended = ppmp?.amendment_scope === 'ATTACHMENT_LIST' || ppmp?.amendment_scope === 'ALL';
+    const isScopePpmpAppOnly = ppmp?.amendment_scope === 'PPMP_APP';
+
+    const preparedSig = ppmp?.signatures?.find(s => s.role === 'end_user')
+        || ppmp?.parent?.signatures?.find(s => s.role === 'end_user')
+        || null;
+
+    const hasHeadApproved = Boolean(
+        ppmp?.head_approved_at ||
+        !['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'].includes(ppmp?.status)
+    );
+    const headSig = hasHeadApproved
+        ? (ppmp?.signatures?.find(s => s.role === 'head') || (isScopePpmpAppOnly ? ppmp?.parent?.signatures?.find(s => s.role === 'head') : null))
+        : null;
+
+    // TWG Signature:
+    // If user selected the PPMP list of attachment to change (ATTACHMENT_LIST or ALL):
+    // The list of attachment TWG signature MUST BE NONE until TWG reviews and approves this new revision!
+    // If only PPMP/APP is being changed (PPMP_APP), TWG review is skipped, so it retains parent's approved TWG signature.
+    const hasTwgApprovedChild = Boolean(
+        ppmp?.twg_approved_at ||
+        (ppmp?.status === 'READY_TO_PRINT' && ppmp?.signatures?.some(s => s.role === 'twg'))
+    );
+
+    const twgSig = isAttachmentAmended
+        ? (hasTwgApprovedChild ? ppmp?.signatures?.find(s => s.role === 'twg') : null)
+        : (ppmp?.signatures?.find(s => s.role === 'twg') || (isScopePpmpAppOnly ? ppmp?.parent?.signatures?.find(s => s.role === 'twg') : null));
 
     // Form fields initialized with saved data or existing PPMP data
     const [officeName, setOfficeName] = useState(

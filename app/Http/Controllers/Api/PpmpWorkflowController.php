@@ -65,7 +65,24 @@ class PpmpWorkflowController extends Controller
                 SystemNotification::notify(
                     $targetHeadId,
                     'PPMP Submitted for Endorsement',
-                    "PPMP No. {$ppmp->ppmp_number} ({$ppmp->title}) was submitted by {$user->name} for your review.",
+                    "PPMP No. {$ppmp->ppmp_number} ({$ppmp->title}) was submitted by {$user->name} for review.",
+                    $ppmp->id,
+                    'info'
+                );
+            }
+
+            // Also notify any active Authorized Staff of this office
+            $authStaffUserIds = User::where('office_id', $ppmp->office_id)
+                ->where('role', 'authorized_staff')
+                ->where('is_active', true)
+                ->where('id', '!=', $targetHeadId)
+                ->pluck('id');
+
+            foreach ($authStaffUserIds as $staffId) {
+                SystemNotification::notify(
+                    $staffId,
+                    'PPMP Submitted for Endorsement (Acting Head)',
+                    "PPMP No. {$ppmp->ppmp_number} ({$ppmp->title}) was submitted by {$user->name} for endorsement on behalf of the Office Head.",
                     $ppmp->id,
                     'info'
                 );
@@ -287,18 +304,27 @@ class PpmpWorkflowController extends Controller
             return response()->json(['message' => "PPMP cannot be submitted for review from status {$ppmp->status}."], 422);
         }
 
-        // Determine destination: if returned by OPPMO or TWG, route back directly or default to BUDGET_OFFICER_REVIEW
-        $nextStatus = match ($ppmp->status) {
-            'OPPMO_RETURNED' => 'OPPMO_REVIEW',
-            'TWG_RETURNED' => 'TWG_REVIEW',
-            default => 'BUDGET_OFFICER_REVIEW',
-        };
+        // Determine destination:
+        // If scope is ATTACHMENT_LIST only, TWG is the only reviewer (Budget Officer and OPPMO are skipped).
+        $isAttachmentOnly = $ppmp->amendment_scope === 'ATTACHMENT_LIST';
 
-        $nextRole = match ($nextStatus) {
-            'OPPMO_REVIEW' => 'oppmo',
-            'TWG_REVIEW' => 'twg',
-            default => 'budget_officer',
-        };
+        if ($isAttachmentOnly) {
+            $nextStatus = 'TWG_REVIEW';
+            $nextRole = 'twg';
+        } else {
+            // Determine destination: if returned by OPPMO or TWG, route back directly or default to BUDGET_OFFICER_REVIEW
+            $nextStatus = match ($ppmp->status) {
+                'OPPMO_RETURNED' => 'OPPMO_REVIEW',
+                'TWG_RETURNED' => 'TWG_REVIEW',
+                default => 'BUDGET_OFFICER_REVIEW',
+            };
+
+            $nextRole = match ($nextStatus) {
+                'OPPMO_REVIEW' => 'oppmo',
+                'TWG_REVIEW' => 'twg',
+                default => 'budget_officer',
+            };
+        }
 
         DB::transaction(function () use ($ppmp, $user, $nextStatus, $nextRole) {
             $now = now();
@@ -545,16 +571,28 @@ class PpmpWorkflowController extends Controller
             return response()->json(['message' => "PPMP is not awaiting OPPMO review."], 422);
         }
 
-        DB::transaction(function () use ($ppmp, $user) {
+        $isScopePpmpAppOnly = $ppmp->amendment_scope === 'PPMP_APP';
+
+        DB::transaction(function () use ($ppmp, $user, $isScopePpmpAppOnly) {
             $now = now();
             $receivedAt = $ppmp->oppmo_received_at ?? $now;
 
-            $ppmp->update([
-                'status' => 'TWG_REVIEW',
+            $nextStatus = $isScopePpmpAppOnly ? 'READY_TO_PRINT' : 'TWG_REVIEW';
+
+            $updateData = [
+                'status' => $nextStatus,
                 'oppmo_approved_at' => $now,
                 'oppmo_received_at' => $receivedAt,
-                'twg_received_at' => null,
-            ]);
+            ];
+
+            if ($isScopePpmpAppOnly) {
+                $updateData['ready_to_print_at'] = $now;
+                $updateData['enduser_received_at'] = null;
+            } else {
+                $updateData['twg_received_at'] = null;
+            }
+
+            $ppmp->update($updateData);
 
             // Mark incoming route as received
             $this->markLatestPendingRouteReceived($ppmp->id, $receivedAt);
@@ -576,9 +614,11 @@ class PpmpWorkflowController extends Controller
                 'reviewer_id' => $user->id,
                 'reviewer_role' => 'oppmo',
                 'action' => 'approve',
-                'remarks' => 'Procurement management review approved.',
+                'remarks' => $isScopePpmpAppOnly
+                    ? 'Procurement management review approved. Amendment scope is PPMP/APP only; document is fully approved and ready to print.'
+                    : 'Procurement management review approved.',
                 'status_before' => 'OPPMO_REVIEW',
-                'status_after' => 'TWG_REVIEW',
+                'status_after' => $nextStatus,
                 'submitted_at' => $ppmp->budget_approved_at ?? $now,
                 'received_at' => $receivedAt,
                 'acted_at' => $now,
@@ -586,36 +626,65 @@ class PpmpWorkflowController extends Controller
                 'user_agent' => request()->userAgent(),
             ]);
 
-            $twgUser = User::where('role', 'twg')->where('is_active', true)->first();
+            if ($isScopePpmpAppOnly) {
+                PpmpRoute::create([
+                    'ppmp_id' => $ppmp->id,
+                    'from_user_id' => $user->id,
+                    'to_user_id' => $ppmp->created_by,
+                    'from_role' => 'oppmo',
+                    'to_role' => 'end_user',
+                    'action' => 'READY_TO_PRINT',
+                    'status' => 'READY_TO_PRINT',
+                    'remarks' => 'Approved by OPPMO (PPMP/APP Scope). Review workflow complete and document is ready to print.',
+                    'submitted_at' => $now,
+                    'acted_at' => $now,
+                ]);
 
-            PpmpRoute::create([
-                'ppmp_id' => $ppmp->id,
-                'from_user_id' => $user->id,
-                'to_user_id' => $twgUser?->id,
-                'from_role' => 'oppmo',
-                'to_role' => 'twg',
-                'action' => 'OPPMO_APPROVED',
-                'status' => 'TWG_REVIEW',
-                'remarks' => 'Approved by OPPMO. Forwarded to BAC-TWG.',
-                'submitted_at' => $now,
-                'acted_at' => $now,
-            ]);
-
-            if ($twgUser) {
                 SystemNotification::notify(
-                    $twgUser->id,
-                    'PPMP Awaiting TWG Review',
-                    "PPMP No. {$ppmp->ppmp_number} was approved by OPPMO and is now awaiting BAC-TWG review.",
+                    $ppmp->created_by,
+                    'PPMP Approved & Ready to Print',
+                    "PPMP No. {$ppmp->ppmp_number} ({$ppmp->title}) has received full OPPMO approval and is now READY TO PRINT.",
                     $ppmp->id,
-                    'info'
+                    'success'
                 );
-            }
 
-            AuditLog::log('PPMP_OPPMO_APPROVED', 'ppmps', $ppmp->id, null, ['status' => 'TWG_REVIEW'], $user->id);
+                AuditLog::log('PPMP_OPPMO_APPROVED_FINAL', 'ppmps', $ppmp->id, null, ['status' => 'READY_TO_PRINT'], $user->id);
+            } else {
+                $twgUser = User::where('role', 'twg')->where('is_active', true)->first();
+
+                PpmpRoute::create([
+                    'ppmp_id' => $ppmp->id,
+                    'from_user_id' => $user->id,
+                    'to_user_id' => $twgUser?->id,
+                    'from_role' => 'oppmo',
+                    'to_role' => 'twg',
+                    'action' => 'OPPMO_APPROVED',
+                    'status' => 'TWG_REVIEW',
+                    'remarks' => 'Approved by OPPMO. Forwarded to BAC-TWG.',
+                    'submitted_at' => $now,
+                    'acted_at' => $now,
+                ]);
+
+                if ($twgUser) {
+                    SystemNotification::notify(
+                        $twgUser->id,
+                        'PPMP Awaiting TWG Review',
+                        "PPMP No. {$ppmp->ppmp_number} was approved by OPPMO and is now awaiting BAC-TWG review.",
+                        $ppmp->id,
+                        'info'
+                    );
+                }
+
+                AuditLog::log('PPMP_OPPMO_APPROVED', 'ppmps', $ppmp->id, null, ['status' => 'TWG_REVIEW'], $user->id);
+            }
         });
 
+        $respMsg = $isScopePpmpAppOnly
+            ? 'PPMP approved by OPPMO and is now ready for printing.'
+            : 'PPMP approved by OPPMO and forwarded to TWG.';
+
         return response()->json([
-            'message' => 'PPMP approved by OPPMO and forwarded to TWG.',
+            'message' => $respMsg,
             'ppmp' => $ppmp->fresh(['office.head', 'creator', 'signatures.user', 'routes.fromUser', 'routes.toUser']),
         ]);
     }
@@ -1260,10 +1329,12 @@ class PpmpWorkflowController extends Controller
                 }
             }
 
-            // If scope does NOT modify List of Attachment (e.g. PPMP_APP only),
-            // copy/link the approved parent signatures so the unchanged List of Attachment maintains its valid e-signatures
-            if ($scope === 'PPMP_APP') {
-                foreach ($ppmp->signatures as $sig) {
+            // For amended or supplemental PPMPs, reviewer signatures (budget_officer, oppmo, twg)
+            // and head signature must NOT be copied from parent.
+            // The new revision starts in DRAFT and must proceed through the review workflow before reviewer signatures/initials are inserted.
+            // Only the end_user (creator) signature is preserved.
+            foreach ($ppmp->signatures as $sig) {
+                if ($sig->role === 'end_user') {
                     $newSig = $sig->replicate();
                     $newSig->ppmp_id = $childPpmp->id;
                     $newSig->save();

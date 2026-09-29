@@ -67,6 +67,13 @@ class AuthController extends Controller
         }
 
         if (!$user->is_active) {
+            if ($user->approval_status === 'rejected') {
+                $reasonText = $user->rejection_reason ? " Reason: {$user->rejection_reason}" : "";
+                return response()->json([
+                    'message' => "Your registration request has been rejected by the Administrator.{$reasonText} Please coordinate with the Office of the Provincial Procurement Management Officer for assistance."
+                ], 403);
+            }
+
             return response()->json([
                 'message' => 'Your account is pending approval. Your account will remain pending until you submit a User Access Form to the Office of the Provincial Procurement Management Officer for approval.'
             ], 403);
@@ -96,17 +103,43 @@ class AuthController extends Controller
      */
     public function register(Request $request): JsonResponse
     {
-        $validated = $request->validate([
+        $rules = [
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
-            'role' => 'required|string|in:end_user,head,budget_officer,oppmo,twg',
+            'role' => 'required|string|in:end_user,head,budget_officer,oppmo,twg,authorized_staff',
             'phone_number' => 'required|string|max:30',
             'address' => 'required|string|max:500',
             'password' => 'required|string|min:6|confirmed',
             'office_id' => 'required|exists:offices,id',
             'designation' => 'required|string|max:255',
             'signature' => 'required|string',
-        ]);
+        ];
+
+        if ($request->input('role') === 'authorized_staff') {
+            $rules['authorization_letter'] = 'required|file|mimes:pdf|max:20480';
+        }
+
+        $validated = $request->validate($rules);
+
+        $authorizationLetterPath = null;
+        if ($validated['role'] === 'authorized_staff' && $request->hasFile('authorization_letter')) {
+            $uploadedLetter = $request->file('authorization_letter');
+
+            // Verify PDF Magic Bytes (%PDF-)
+            $handle = fopen($uploadedLetter->getRealPath(), 'rb');
+            $header = fread($handle, 5);
+            fclose($handle);
+            if ($header !== '%PDF-') {
+                return response()->json([
+                    'message' => 'The authorization letter must be a valid PDF document.',
+                    'errors' => ['authorization_letter' => ['Invalid PDF file header.']]
+                ], 422);
+            }
+
+            $letterFilename = 'auth_' . Str::uuid() . '.pdf';
+            // Save in storage/app/private/authorization_letter/ (local disk root is storage/app/private)
+            $authorizationLetterPath = $uploadedLetter->storeAs('authorization_letter', $letterFilename, 'local');
+        }
 
         $signaturePath = null;
         if (!empty($validated['signature'])) {
@@ -136,7 +169,9 @@ class AuthController extends Controller
             'office_id' => $validated['office_id'],
             'designation' => $validated['designation'] ?? null,
             'signature_path' => $signaturePath,
+            'authorization_letter_path' => $authorizationLetterPath,
             'is_active' => false,
+            'approval_status' => 'pending',
         ]);
 
         AuditLog::log(
@@ -144,7 +179,7 @@ class AuthController extends Controller
             'users',
             $user->id,
             null,
-            ['email' => $user->email, 'name' => $user->name, 'office_id' => $user->office_id, 'is_active' => false],
+            ['email' => $user->email, 'name' => $user->name, 'office_id' => $user->office_id, 'role' => $user->role, 'is_active' => false],
             $user->id
         );
 

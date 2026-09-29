@@ -25,7 +25,7 @@ export const isAwaitingReceive = (ppmp, user) => {
     }
 
     if (status === 'HEAD_PENDING') {
-        const isTargetHead = role === 'head' && (user.office_id === ppmp.office_id || !ppmp.office_id);
+        const isTargetHead = (role === 'head' || role === 'authorized_staff') && (user.office_id === ppmp.office_id || !ppmp.office_id);
         return (isTargetHead || role === 'admin') && !ppmp.head_received_at;
     }
 
@@ -83,7 +83,7 @@ export const getStageReceiptInfo = (ppmp, user) => {
         recipientRole = 'Office Head';
         isReceived = Boolean(ppmp.head_received_at);
         receivedAt = ppmp.head_received_at;
-        const isTargetHead = role === 'head' && (user?.office_id === ppmp.office_id || !ppmp.office_id);
+        const isTargetHead = (role === 'head' || role === 'authorized_staff') && (user?.office_id === ppmp.office_id || !ppmp.office_id);
         canCurrentUserReceive = (isTargetHead || role === 'admin') && !isReceived;
     } else if (status === 'BUDGET_OFFICER_REVIEW') {
         recipientRole = 'Budget Officer';

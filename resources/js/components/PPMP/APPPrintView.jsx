@@ -52,13 +52,6 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
 
     const [isEditing, setIsEditing] = useState(!savedData && allowEdit);
     const [saving, setSaving] = useState(false);
-    const [showOldAppModal, setShowOldAppModal] = useState(false);
-    const [isPrintingOldApp, setIsPrintingOldApp] = useState(false);
-
-    // Historical Parent PPMP / APP Data
-    const parentPpmp = ppmp?.parent || null;
-    const parentAppData = parentPpmp?.app_data || null;
-    const hasOldApp = Boolean(parentPpmp && (parentAppData || (parentPpmp.items && parentPpmp.items.length > 0)));
 
     // Form states
     const [fiscalYear, setFiscalYear] = useState(
@@ -72,11 +65,45 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
     );
 
     const signatures = ppmp?.signatures || [];
-    const preparedSig = signatures.find(s => s.role === 'end_user');
-    const headSig = signatures.find(s => s.role === 'head');
-    const budgetSig = signatures.find(s => s.role === 'budget_officer');
-    const oppmoSig = signatures.find(s => s.role === 'oppmo');
-    const twgSig = signatures.find(s => s.role === 'twg');
+
+    // If scope is ATTACHMENT_LIST only, PPMP / APP were NOT changed and retain approved baseline signatures from parent.
+    // If scope is PPMP_APP, ALL, or initial plan: PPMP / APP ARE being changed, so budget & oppmo reviewer signatures MUST BE NONE until they approve this child PPMP!
+    const isScopeAttachmentOnly = ppmp?.amendment_scope === 'ATTACHMENT_LIST';
+
+    // Reviewer signatures require review approval before their initial/signature is valid
+    const hasHeadApproved = Boolean(
+        ppmp?.head_approved_at ||
+        !['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'].includes(ppmp?.status)
+    );
+    const hasBudgetApproved = Boolean(
+        ppmp?.budget_approved_at ||
+        ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
+    );
+    const hasOppmoApproved = Boolean(
+        ppmp?.oppmo_approved_at ||
+        ['TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
+    );
+    const hasTwgApproved = Boolean(
+        ppmp?.ready_to_print_at ||
+        ppmp?.status === 'READY_TO_PRINT'
+    );
+
+    const preparedSig = signatures.find(s => s.role === 'end_user')
+        || (ppmp?.parent?.signatures?.find(s => s.role === 'end_user'))
+        || null;
+    const headSig = hasHeadApproved
+        ? (signatures.find(s => s.role === 'head') || (isScopeAttachmentOnly ? ppmp?.parent?.signatures?.find(s => s.role === 'head') : null))
+        : null;
+
+    const budgetSig = isScopeAttachmentOnly
+        ? (signatures.find(s => s.role === 'budget_officer') || ppmp?.parent?.signatures?.find(s => s.role === 'budget_officer') || null)
+        : (hasBudgetApproved ? signatures.find(s => s.role === 'budget_officer') : null);
+
+    const oppmoSig = isScopeAttachmentOnly
+        ? (signatures.find(s => s.role === 'oppmo') || ppmp?.parent?.signatures?.find(s => s.role === 'oppmo') || null)
+        : (hasOppmoApproved ? signatures.find(s => s.role === 'oppmo') : null);
+
+    const twgSig = hasTwgApproved ? signatures.find(s => s.role === 'twg') : null;
 
     // Signers:
     // Prepared & Reviewed By must be NORJANNA M. CAMAGUIN, MPA (PGDH - OPPMO)
@@ -227,7 +254,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
         }
     };
 
-    const isReadyToPrint = ppmp?.status === 'READY_TO_PRINT';
+    const isReadyToPrint = ppmp?.status === 'READY_TO_PRINT' || !canEdit;
 
     const handlePrint = () => {
         if (!isReadyToPrint) {
@@ -236,25 +263,6 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
         }
         window.print();
     };
-
-    const handlePrintOldApp = () => {
-        setShowOldAppModal(false);
-        setIsPrintingOldApp(true);
-        setTimeout(() => {
-            window.print();
-        }, 300);
-    };
-
-    if (isPrintingOldApp && parentPpmp) {
-        return (
-            <APPPrintView
-                ppmp={parentPpmp}
-                user={user}
-                canEdit={false}
-                onBack={() => setIsPrintingOldApp(false)}
-            />
-        );
-    }
 
     const totalAppBudget = rows.reduce((sum, r) => sum + (parseFloat(r.estimatedBudget) || 0), 0);
 
@@ -270,8 +278,13 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                         <ArrowLeft className="w-4 h-4" /> Back to Workspace
                     </button>
                     <div>
-                        <div className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                            Annual Procurement Plan (APP) — Province of Davao del Sur
+                        <div className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                            <span>Annual Procurement Plan (APP) — Province of Davao del Sur</span>
+                            {!canEdit && (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-900 text-indigo-200 border border-indigo-700">
+                                    Baseline / Old APP
+                                </span>
+                            )}
                         </div>
                         <div className="text-[11px] text-blue-400 font-mono">
                             {isEditing ? 'Configuring / Edit Mode' : 'Official Clean Printable View (CY ' + fiscalYear + ')'}
@@ -280,17 +293,6 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {hasOldApp && (
-                        <button
-                            type="button"
-                            onClick={() => setShowOldAppModal(true)}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded text-xs font-bold uppercase tracking-wider border border-indigo-500 shadow-sm transition cursor-pointer"
-                            title="View Annual / Previous APP Data"
-                        >
-                            <History className="w-3.5 h-3.5" />
-                            Old APP
-                        </button>
-                    )}
 
                     {allowEdit && !isEditing && (
                         <button
@@ -779,9 +781,9 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                             <div className="font-bold text-xs uppercase underline text-center">
                                                 {preparedByName}
                                             </div>
-                                            {oppmoSig && (oppmoSig.user?.signature_path || headSig?.user?.signature_path) && (
+                                            {oppmoSig && oppmoSig.user?.signature_path && (
                                                 <img
-                                                    src={`/api/users/${oppmoSig.user?.signature_path ? oppmoSig.user.id : headSig.user.id}/signature`}
+                                                    src={`/api/users/${oppmoSig.user.id}/signature`}
                                                     alt="Signature"
                                                     className="h-6 max-w-[60px] object-contain absolute left-full ml-1.5 bottom-0 pointer-events-none"
                                                 />
@@ -842,340 +844,6 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                 )}
             </div>
 
-            {/* OLD / HISTORICAL APP FULL MODAL */}
-            {showOldAppModal && parentPpmp && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-3 sm:p-6 backdrop-blur-xs no-print">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[96vw] max-h-[94vh] flex flex-col border border-slate-300 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                        {/* Modal Header */}
-                        <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between border-b border-slate-800 shrink-0">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-indigo-600 rounded-lg text-white">
-                                    <History className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <h2 className="text-base font-bold uppercase tracking-wide text-white">
-                                            {!parentPpmp.parent_id ? 'Old / Annual Procurement Plan (APP) — Full Review' : 'Previous Procurement Plan (APP) — Full Review'}
-                                        </h2>
-                                        <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded border ${
-                                            !parentPpmp.parent_id
-                                                ? 'bg-emerald-900 text-emerald-200 border-emerald-700'
-                                                : 'bg-indigo-900 text-indigo-200 border-indigo-700'
-                                        }`}>
-                                            {!parentPpmp.parent_id ? 'Annual Baseline' : 'Previous Baseline'}
-                                        </span>
-                                        <span className="font-mono text-xs text-slate-300 font-semibold px-2 py-0.5 bg-slate-800 rounded border border-slate-700">
-                                            PPMP No. {parentPpmp.ppmp_number} ({parentPpmp.tracking_number})
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-slate-400 mt-0.5 truncate max-w-2xl">
-                                        {parentPpmp.title} &bull; CY {parentPpmp.fiscal_year} &bull; Office: {parentPpmp.implementing_unit || parentPpmp.office?.name || 'Department'}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <button
-                                    type="button"
-                                    onClick={handlePrintOldApp}
-                                    className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition shadow-sm cursor-pointer"
-                                    title="Open clean printable view and print Old APP"
-                                >
-                                    <Printer className="w-4 h-4" />
-                                    Print Old APP
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowOldAppModal(false)}
-                                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                                    title="Close modal"
-                                >
-                                    <X className="w-6 h-6" />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Modal Body: Full Official APP Sheet Layout */}
-                        {(() => {
-                            const oldRows = parentAppData?.rows && Array.isArray(parentAppData.rows) && parentAppData.rows.length > 0
-                                ? parentAppData.rows
-                                : (parentPpmp.items && parentPpmp.items.length > 0
-                                    ? parentPpmp.items.filter(i => !i.is_header).map((item, idx) => ({
-                                        id: item.id || idx + 1,
-                                        projectTitle: item.description,
-                                        endUser: parentPpmp.implementing_unit || parentPpmp.office?.name || 'Implementing Unit',
-                                        generalDescription: item.description,
-                                        modeOfProcurement: item.procurement_mode || 'Public Bidding',
-                                        earlyProcurement: item.pre_proc_conference ? 'YES' : 'NO',
-                                        criteria: 'LCRB',
-                                        startDate: item.start_date || '',
-                                        endDate: item.end_date || '',
-                                        sourceOfFund: item.source_of_fund || 'General Fund',
-                                        estimatedBudget: item.estimated_budget || 0,
-                                        procurementStrategy: item.remarks || '',
-                                    }))
-                                    : []);
-
-                            const oldTotal = oldRows.reduce((sum, r) => sum + (parseFloat(r.estimatedBudget) || 0), 0);
-                            const oldFiscalYear = parentAppData?.fiscal_year || parentPpmp.fiscal_year || fiscalYear;
-                            const oldPlanVersionType = parentAppData?.plan_version_type || parentPpmp.plan_type || 'FINAL';
-                            const oldUpdatedVersionNo = parentAppData?.updated_version_no || '';
-
-                            const parentSigs = parentPpmp.signatures || [];
-                            const parentHeadSig = parentSigs.find(s => s.role === 'head');
-                            const parentBudgetSig = parentSigs.find(s => s.role === 'budget_officer');
-                            const parentOppmoSig = parentSigs.find(s => s.role === 'oppmo');
-
-                            const oldPreparedName = parentAppData?.prepared_by_name ||
-                                parentPpmp.default_signatories?.bac_secretariat?.name ||
-                                parentOppmoSig?.signer_name ||
-                                preparedByName;
-                            const oldPreparedPosition = parentAppData?.prepared_by_position ||
-                                parentPpmp.default_signatories?.bac_secretariat?.position ||
-                                parentOppmoSig?.signer_designation ||
-                                preparedByPosition;
-
-                            const oldRecommendingName = parentAppData?.recommending_name ||
-                                parentPpmp.default_signatories?.budget_requirement?.name ||
-                                parentBudgetSig?.signer_name ||
-                                recommendingName;
-                            const oldRecommendingPosition = parentAppData?.recommending_position ||
-                                parentPpmp.default_signatories?.budget_requirement?.position ||
-                                parentBudgetSig?.signer_designation ||
-                                recommendingPosition;
-
-                            const oldApprovedName = parentAppData?.approved_by_name ||
-                                parentPpmp.default_signatories?.approved_by?.name ||
-                                approvedByName;
-                            const oldApprovedPosition = parentAppData?.approved_by_position ||
-                                parentPpmp.default_signatories?.approved_by?.position ||
-                                approvedByPosition;
-
-                            return (
-                                <div className="p-4 md:p-8 overflow-y-auto overflow-x-auto flex-1 bg-slate-200">
-                                    <div className="bg-white rounded-lg border border-slate-400 shadow-lg p-6 md:p-8 max-w-[1500px] mx-auto text-black">
-                                        {/* Official APP Header with Seal */}
-                                        <div className="flex flex-col items-center justify-center text-center relative mb-4">
-                                            <img
-                                                src="/images/logo.png"
-                                                alt="Province of Davao del Sur Seal"
-                                                className="w-16 h-16 object-contain mb-1"
-                                                onError={(e) => { e.target.style.display = 'none'; }}
-                                            />
-                                            <div className="text-[11px] uppercase tracking-wide">Republic of the Philippines</div>
-                                            <div className="text-xs font-extrabold uppercase tracking-wider">PROVINCE OF DAVAO DEL SUR</div>
-                                            <div className="text-xs font-extrabold uppercase tracking-wider mt-0.5">
-                                                ANNUAL PROCUREMENT PLAN FOR CY {oldFiscalYear}
-                                            </div>
-
-                                            {/* Checkboxes row matching official PDF */}
-                                            <div className="flex items-center justify-center gap-8 text-[11px] font-bold mt-2">
-                                                <label className="flex items-center gap-1.5 cursor-default">
-                                                    <span className={`w-3.5 h-3.5 border border-black inline-flex items-center justify-center text-[10px] leading-none ${oldPlanVersionType === 'INDICATIVE' ? 'bg-black text-white font-black' : 'bg-white'}`}>
-                                                        {oldPlanVersionType === 'INDICATIVE' ? '✓' : ''}
-                                                    </span>
-                                                    <span>INDICATIVE</span>
-                                                </label>
-
-                                                <label className="flex items-center gap-1.5 cursor-default">
-                                                    <span className={`w-3.5 h-3.5 border border-black inline-flex items-center justify-center text-[10px] leading-none ${oldPlanVersionType === 'FINAL' ? 'bg-black text-white font-black' : 'bg-white'}`}>
-                                                        {oldPlanVersionType === 'FINAL' ? '✓' : ''}
-                                                    </span>
-                                                    <span>FINAL</span>
-                                                </label>
-
-                                                <label className="flex items-center gap-1.5 cursor-default">
-                                                    <span className={`w-3.5 h-3.5 border border-black inline-flex items-center justify-center text-[10px] leading-none ${oldPlanVersionType === 'UPDATED' ? 'bg-black text-white font-black' : 'bg-white'}`}>
-                                                        {oldPlanVersionType === 'UPDATED' ? '✓' : ''}
-                                                    </span>
-                                                    <span>UPDATED VERSION NO. {oldUpdatedVersionNo || ''}</span>
-                                                </label>
-                                            </div>
-                                        </div>
-
-                                        {/* Exact Official 11-column APP Table */}
-                                        <table className="w-full border-collapse border border-black text-[9px] leading-tight print-table">
-                                            <thead>
-                                                {/* Top Category Header Row */}
-                                                <tr className="text-center font-bold border-b border-black">
-                                                    <th colSpan={6} className="border border-black p-1 uppercase">
-                                                        PROCUREMENT PROJECT DETAILS
-                                                    </th>
-                                                    <th colSpan={2} className="border border-black p-1 uppercase">
-                                                        PROJECTED TIMELINE (MM/YYYY)
-                                                    </th>
-                                                    <th colSpan={2} className="border border-black p-1 uppercase">
-                                                        FUNDING DETAILS
-                                                    </th>
-                                                    <th rowSpan={2} className="border border-black p-1 w-[12%] align-middle uppercase">
-                                                        REMARKS<br />
-                                                        <span className="font-normal text-[8px] normal-case">(Other relevant descriptions of the procurement project, if applicable)</span>
-                                                    </th>
-                                                </tr>
-
-                                                {/* Detailed Column Headers */}
-                                                <tr className="text-center font-bold border-b border-black">
-                                                    <th className="border border-black p-1 w-[13%]">Project Title</th>
-                                                    <th className="border border-black p-1 w-[10%]">End-User or Implementing Unit</th>
-                                                    <th className="border border-black p-1 w-[13%]">General Description of the Project</th>
-                                                    <th className="border border-black p-1 w-[9%]">Mode of Procurement</th>
-                                                    <th className="border border-black p-1 w-[7%]">To be covered by an Early Procurement Activity? (YES/NO)</th>
-                                                    <th className="border border-black p-1 w-[9%]">Criteria for Bid Evaluation (Including Sustainability and Domestic Preference)</th>
-                                                    <th className="border border-black p-1 w-[7%]">Start of Procurement Activity</th>
-                                                    <th className="border border-black p-1 w-[7%]">End of Procurement Activity</th>
-                                                    <th className="border border-black p-1 w-[8%]">Source of Fund</th>
-                                                    <th className="border border-black p-1 w-[9%]">Estimated Budget / Approved Budget for the Contract (PhP)</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {oldRows.map((row, idx) => (
-                                                    <tr key={idx} className="min-h-6">
-                                                        <td className="border border-black px-1.5 py-1 align-top text-center font-bold whitespace-pre-wrap">
-                                                            {formatDescription6Words(row.projectTitle)}
-                                                        </td>
-                                                        <td className="border border-black px-1 py-1 align-top text-center uppercase">
-                                                            {row.endUser}
-                                                        </td>
-                                                        <td className="border border-black px-1.5 py-1 align-top text-center whitespace-pre-wrap">
-                                                            {formatDescription6Words(row.generalDescription)}
-                                                        </td>
-                                                        <td className="border border-black px-1 py-1 align-top text-center">
-                                                            {row.modeOfProcurement}
-                                                        </td>
-                                                        <td className="border border-black px-1 py-1 align-top text-center font-bold">
-                                                            {row.earlyProcurement || 'NO'}
-                                                        </td>
-                                                        <td className="border border-black px-1 py-1 align-top text-center font-bold">
-                                                            {row.criteria || 'LCRB'}
-                                                        </td>
-                                                        <td className="border border-black px-1 py-1 align-top text-center">
-                                                            {row.startDate ? formatMonthYear(row.startDate) : '—'}
-                                                        </td>
-                                                        <td className="border border-black px-1 py-1 align-top text-center">
-                                                            {row.endDate ? formatMonthYear(row.endDate) : '—'}
-                                                        </td>
-                                                        <td className="border border-black px-1 py-1 align-top text-center">
-                                                            {row.sourceOfFund || 'General Fund'}
-                                                        </td>
-                                                        <td className="border border-black px-1 py-1 align-top text-right font-mono font-bold">
-                                                            {row.estimatedBudget ? formatCurrency(row.estimatedBudget) : '—'}
-                                                        </td>
-                                                        <td className="border border-black px-1 py-1 align-top text-center">
-                                                            {row.procurementStrategy || '—'}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                            <tfoot>
-                                                <tr className="border-t-2 border-black font-bold">
-                                                    <td colSpan={9} className="border border-black p-1.5 text-right uppercase">
-                                                        Total Old APP Budget:
-                                                    </td>
-                                                    <td className="border border-black p-1.5 text-right font-mono font-bold">
-                                                        {formatCurrency(oldTotal)}
-                                                    </td>
-                                                    <td className="border border-black"></td>
-                                                </tr>
-                                            </tfoot>
-                                        </table>
-
-                                        {/* Official Signatures Section matching active APP - compressed & borderless */}
-                                        <div className="mt-4 text-black text-[9px]">
-                                            <div className="grid grid-cols-3 gap-4 items-start">
-                                                {/* Column 1: Prepared & Reviewed By */}
-                                                <div>
-                                                    <div className="font-bold mb-2">Prepared & Reviewed By:</div>
-                                                    <div className="text-center flex flex-col items-center justify-end">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            <div className="font-bold text-xs uppercase underline">
-                                                                {oldPreparedName}
-                                                            </div>
-                                                            {parentOppmoSig && (parentOppmoSig.user?.signature_path || parentHeadSig?.user?.signature_path) && (
-                                                                <img
-                                                                    src={`/api/users/${parentOppmoSig.user?.signature_path ? parentOppmoSig.user.id : parentHeadSig.user.id}/signature`}
-                                                                    alt="Signature"
-                                                                    className="h-6 max-w-[60px] object-contain shrink-0"
-                                                                />
-                                                            )}
-                                                        </div>
-                                                        <div className="text-[9px] uppercase mt-0.5">
-                                                            {oldPreparedPosition}
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Column 2: Recommending Approval */}
-                                                <div>
-                                                    <div className="font-bold mb-2">Recommending Approval:</div>
-                                                    <div className="text-center flex flex-col items-center justify-end">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            <div className="font-bold text-xs uppercase underline">
-                                                                {oldRecommendingName}
-                                                            </div>
-                                                            {parentBudgetSig && parentBudgetSig.user?.signature_path && (
-                                                                <img
-                                                                    src={`/api/users/${parentBudgetSig.user.id}/signature`}
-                                                                    alt="Signature"
-                                                                    className="h-6 max-w-[60px] object-contain shrink-0"
-                                                                />
-                                                            )}
-                                                        </div>
-                                                        <div className="text-[9px] uppercase mt-0.5 font-bold">
-                                                            {oldRecommendingPosition}
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Column 3: Approved by: (this is for governor) */}
-                                                <div>
-                                                    <div className="font-bold mb-2">
-                                                        Approved by:
-                                                    </div>
-                                                    <div className="text-center flex flex-col items-center justify-end">
-                                                        <div className="font-bold text-xs uppercase underline">
-                                                            {oldApprovedName}
-                                                        </div>
-                                                        <div className="text-[9px] uppercase mt-0.5 font-bold">
-                                                            {oldApprovedPosition}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* System Generated / E-Signature Validity Notice */}
-                                            <div className="mt-4 pt-2 border-t border-dotted border-slate-300 text-center">
-                                                <p className="text-[8px] italic text-slate-600 font-sans tracking-wide">
-                                                    * This is an electronically generated and certified document under the Electronic Procurement Management System. Valid even without a physical or handwritten signature.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })()}
-
-                        {/* Modal Footer */}
-                        <div className="bg-white px-6 py-3 border-t border-slate-300 flex items-center justify-between text-xs text-slate-700 shrink-0">
-                            <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-900">Baseline Status:</span>
-                                <span className="font-semibold text-slate-800">{parentPpmp.status}</span>
-                                <span className="mx-2 text-slate-300">|</span>
-                                <span className="text-slate-500 italic">
-                                    Read-only historical preview of Annual Procurement Plan
-                                </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowOldAppModal(false)}
-                                    className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition cursor-pointer"
-                                >
-                                    Close Preview
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

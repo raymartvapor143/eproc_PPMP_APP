@@ -92,7 +92,14 @@ export const authService = {
         }
         return res;
     },
-    register: (data) => api.post('/register', data),
+    register: (data) => {
+        if (data instanceof FormData) {
+            return api.post('/register', data, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+        }
+        return api.post('/register', data);
+    },
     getPublicOffices: () => api.get('/public-offices'),
     logout: async () => {
         try {
@@ -189,9 +196,11 @@ export const userService = {
     getAll: () => api.get('/users'),
     changePassword: (id, password) => api.post(`/users/${id}/change-password`, { password }),
     approve: (id) => api.post(`/users/${id}/approve`),
+    reject: (id, reason = '') => api.post(`/users/${id}/reject`, { reason }),
     toggleStatus: (id) => api.post(`/users/${id}/toggle-status`),
     delete: (id) => api.delete(`/users/${id}`),
     getUserSignatureUrl: (id) => `/api/users/${id}/signature`,
+    getUserAuthorizationLetterUrl: (id) => `/api/users/${id}/authorization-letter`,
 };
 
 export const officeService = {

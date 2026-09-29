@@ -32,6 +32,7 @@ import {
     Building2,
     Check,
     UserCheck,
+    UserX,
     ToggleLeft,
     ToggleRight,
     Phone,
@@ -40,6 +41,8 @@ import {
     Loader2,
     RefreshCw,
     Eye,
+    Image as ImageIcon,
+    PenTool,
 } from 'lucide-react';
 
 export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) => {
@@ -80,6 +83,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
     const [passwordSuccess, setPasswordSuccess] = useState('');
     const [processingUserId, setProcessingUserId] = useState(null);
     const [userActionFeedback, setUserActionFeedback] = useState({ type: '', text: '' });
+    const [signaturePreviewUser, setSignaturePreviewUser] = useState(null);
 
     // Office management & CSV/Excel Import state for Admin view
     const [officesList, setOfficesList] = useState(data?.offices || []);
@@ -281,6 +285,43 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
         } catch (err) {
             setUserActionFeedback({ type: 'error', text: err.response?.data?.message || 'Failed to approve account.' });
         } finally {
+            setProcessingUserId(null);
+        }
+    };
+
+    const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+    const [selectedUserForReject, setSelectedUserForReject] = useState(null);
+    const [rejectReason, setRejectReason] = useState('');
+    const [rejectingUser, setRejectingUser] = useState(false);
+
+    const openRejectModal = (targetUser) => {
+        setSelectedUserForReject(targetUser);
+        setRejectReason('');
+        setIsRejectModalOpen(true);
+    };
+
+    const closeRejectModal = () => {
+        setIsRejectModalOpen(false);
+        setSelectedUserForReject(null);
+        setRejectReason('');
+    };
+
+    const handleConfirmRejectUser = async (e) => {
+        e?.preventDefault?.();
+        if (!selectedUserForReject) return;
+
+        setRejectingUser(true);
+        setProcessingUserId(selectedUserForReject.id);
+        setUserActionFeedback({ type: '', text: '' });
+        try {
+            const res = await userService.reject(selectedUserForReject.id, rejectReason.trim());
+            setUserActionFeedback({ type: 'success', text: res.data.message || `Registration for ${selectedUserForReject.name} rejected.` });
+            closeRejectModal();
+            await refreshUsers();
+        } catch (err) {
+            setUserActionFeedback({ type: 'error', text: err.response?.data?.message || 'Failed to reject registration.' });
+        } finally {
+            setRejectingUser(false);
             setProcessingUserId(null);
         }
     };
@@ -548,7 +589,9 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
     };
 
     // ─── COMPUTED HELPERS (used by both admin and non-admin) ──────────────────
-    const pendingUsersCount = usersList.filter(u => !u.is_active).length;
+    const pendingUsersCount = usersList.filter(u => !u.is_active && u.approval_status !== 'rejected').length;
+    const activeUsersCount = usersList.filter(u => u.is_active && u.approval_status !== 'rejected').length;
+    const rejectedUsersCount = usersList.filter(u => u.approval_status === 'rejected').length;
 
     // ─── ADMIN EARLY RETURN ───────────────────────────────────────────────────
     if (user?.role === 'admin') {
@@ -806,7 +849,8 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                         {[
                                             { key: 'all', label: 'All Users' },
                                             { key: 'pending', label: `Pending${pendingUsersCount > 0 ? ` (${pendingUsersCount})` : ''}` },
-                                            { key: 'active', label: 'Active' },
+                                            { key: 'active', label: `Active (${activeUsersCount})` },
+                                            { key: 'rejected', label: `Rejected${rejectedUsersCount > 0 ? ` (${rejectedUsersCount})` : ''}` },
                                         ].map(tab => (
                                             <button
                                                 key={tab.key}
@@ -832,8 +876,9 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                             <tbody className="divide-y divide-slate-100">
                                                 {(() => {
                                                     let filtered = usersList;
-                                                    if (userTab === 'pending') filtered = filtered.filter(u => !u.is_active);
-                                                    else if (userTab === 'active') filtered = filtered.filter(u => u.is_active);
+                                                    if (userTab === 'pending') filtered = filtered.filter(u => !u.is_active && u.approval_status !== 'rejected');
+                                                    else if (userTab === 'active') filtered = filtered.filter(u => u.is_active && u.approval_status !== 'rejected');
+                                                    else if (userTab === 'rejected') filtered = filtered.filter(u => u.approval_status === 'rejected');
                                                     if (userSearch) {
                                                         const q = userSearch.toLowerCase();
                                                         filtered = filtered.filter(u =>
@@ -849,83 +894,177 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                     const totalPages = Math.ceil(filtered.length / userPerPage) || 1;
                                                     const safePage = Math.min(userPage, totalPages);
                                                     const paginated = filtered.slice((safePage - 1) * userPerPage, safePage * userPerPage);
-                                                    return paginated.map(u => (
-                                                        <tr key={u.id} className="hover:bg-slate-50 transition">
-                                                            <td className="p-3">
-                                                                <div className="font-bold text-slate-900">{u.name}</div>
-                                                                <div className="text-slate-500">{u.email}</div>
-                                                                {u.phone_number && <div className="text-slate-400 flex items-center gap-1"><Phone className="w-3 h-3" />{u.phone_number}</div>}
-                                                            </td>
-                                                            <td className="p-3 text-slate-700">
-                                                                <div className="font-medium">{u.office?.name || '—'}</div>
-                                                                {u.office?.code && <div className="text-slate-400 font-mono">{u.office.code}</div>}
-                                                            </td>
-                                                            <td className="p-3">
-                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                                                                    u.role === 'admin' ? 'bg-rose-100 text-rose-800' :
-                                                                    u.role === 'budget_officer' ? 'bg-indigo-100 text-indigo-800' :
-                                                                    u.role === 'oppmo' ? 'bg-purple-100 text-purple-800' :
-                                                                    u.role === 'twg' ? 'bg-amber-100 text-amber-800' :
-                                                                    u.role === 'head' ? 'bg-blue-100 text-blue-800' :
-                                                                    'bg-slate-100 text-slate-700'
-                                                                }`}>
-                                                                    {u.role === 'admin' ? 'Administrator' :
-                                                                     u.role === 'budget_officer' ? 'Budget Officer' :
-                                                                     u.role === 'oppmo' ? 'OPPMO' :
-                                                                     u.role === 'twg' ? 'TWG' :
-                                                                     u.role === 'head' ? 'Head of Office' :
-                                                                     'End User'}
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-3">
-                                                                {!u.is_active ? (
-                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[11px] font-semibold animate-pulse">
-                                                                        <Clock className="w-3 h-3" /> Pending
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[11px] font-semibold">
-                                                                        <CheckCircle2 className="w-3 h-3" /> Active
-                                                                    </span>
-                                                                )}
-                                                            </td>
-                                                            <td className="p-3 text-right">
-                                                                <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                                                                    {!u.is_active && (
-                                                                        <button
-                                                                            onClick={() => handleApproveUser(u)}
-                                                                            disabled={processingUserId === u.id}
-                                                                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold transition disabled:opacity-50 cursor-pointer"
-                                                                        >
-                                                                            <UserCheck className="w-3 h-3" /> Approve
-                                                                        </button>
+                                                    return paginated.map(u => {
+                                                        const isPending = !u.is_active && u.approval_status !== 'rejected';
+                                                        const isRejected = u.approval_status === 'rejected';
+                                                        return (
+                                                            <tr key={u.id} className="hover:bg-slate-50 transition">
+                                                                <td className="p-3">
+                                                                    <div className="font-bold text-slate-900">{u.name}</div>
+                                                                    <div className="text-slate-500">{u.email}</div>
+                                                                    {u.phone_number && <div className="text-slate-400 flex items-center gap-1"><Phone className="w-3 h-3" />{u.phone_number}</div>}
+                                                                </td>
+                                                                <td className="p-3 text-slate-700">
+                                                                    <div className="font-medium">{u.office?.name || '—'}</div>
+                                                                    {u.office?.code && <div className="text-slate-400 font-mono">{u.office.code}</div>}
+                                                                </td>
+                                                                <td className="p-3">
+                                                                    <div className="flex flex-col items-start gap-1">
+                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                                                            u.role === 'admin' ? 'bg-rose-100 text-rose-800' :
+                                                                            u.role === 'budget_officer' ? 'bg-indigo-100 text-indigo-800' :
+                                                                            u.role === 'oppmo' ? 'bg-purple-100 text-purple-800' :
+                                                                            u.role === 'twg' ? 'bg-amber-100 text-amber-800' :
+                                                                            u.role === 'head' ? 'bg-blue-100 text-blue-800' :
+                                                                            u.role === 'authorized_staff' ? 'bg-teal-100 text-teal-800 border border-teal-300' :
+                                                                            'bg-slate-100 text-slate-700'
+                                                                        }`}>
+                                                                            {u.role === 'admin' ? 'Administrator' :
+                                                                             u.role === 'budget_officer' ? 'Budget Officer' :
+                                                                             u.role === 'oppmo' ? 'OPPMO' :
+                                                                             u.role === 'twg' ? 'TWG' :
+                                                                             u.role === 'head' ? 'Head of Office' :
+                                                                             u.role === 'authorized_staff' ? 'Authorize Staff' :
+                                                                             'End User'}
+                                                                        </span>
+                                                                        {/* Uploaded Documents for Authorized Staff */}
+                                                                        {u.role === 'authorized_staff' && (
+                                                                            <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                                                                                {u.authorization_letter_path ? (
+                                                                                    <a
+                                                                                        href={`/api/users/${u.id}/authorization-letter`}
+                                                                                        target="_blank"
+                                                                                        rel="noopener noreferrer"
+                                                                                        className="inline-flex items-center gap-1 text-[10px] text-teal-700 hover:text-teal-900 font-medium underline underline-offset-2 hover:bg-teal-50 px-1 py-0.5 rounded transition"
+                                                                                        title="View Authorization Letter PDF"
+                                                                                    >
+                                                                                        <FileText className="w-3 h-3 text-teal-600 shrink-0" />
+                                                                                        <span>PDF Letter</span>
+                                                                                    </a>
+                                                                                ) : (
+                                                                                    <span className="text-[10px] text-amber-600 italic">No Letter</span>
+                                                                                )}
+                                                                                {u.signature_path ? (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => setSignaturePreviewUser(u)}
+                                                                                        className="inline-flex items-center gap-1 text-[10px] text-indigo-700 hover:text-indigo-900 font-medium underline underline-offset-2 hover:bg-indigo-50 px-1 py-0.5 rounded transition cursor-pointer"
+                                                                                        title="View Signature"
+                                                                                    >
+                                                                                        <PenTool className="w-3 h-3 text-indigo-600 shrink-0" />
+                                                                                        <span>Signature</span>
+                                                                                    </button>
+                                                                                ) : (
+                                                                                    <span className="text-[10px] text-slate-400 italic">No Signature</span>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="p-3">
+                                                                    {isRejected ? (
+                                                                        <div className="flex flex-col gap-0.5 items-start">
+                                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-rose-100 text-rose-800 rounded-full text-[11px] font-semibold">
+                                                                                <UserX className="w-3 h-3 text-rose-600" /> Rejected
+                                                                            </span>
+                                                                            {u.rejection_reason && (
+                                                                                <span className="text-[10px] text-slate-500 max-w-[160px] truncate" title={u.rejection_reason}>
+                                                                                    {u.rejection_reason}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    ) : isPending ? (
+                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[11px] font-semibold animate-pulse">
+                                                                            <Clock className="w-3 h-3" /> Pending
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[11px] font-semibold">
+                                                                            <CheckCircle2 className="w-3 h-3" /> Active
+                                                                        </span>
                                                                     )}
-                                                                    {u.id !== user?.id && (
-                                                                        <button
-                                                                            onClick={() => handleToggleUserStatus(u)}
-                                                                            disabled={processingUserId === u.id}
-                                                                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-bold transition disabled:opacity-50 cursor-pointer ${u.is_active ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-slate-200 hover:bg-emerald-600 hover:text-white text-slate-700'}`}
-                                                                        >
-                                                                            {u.is_active ? <><ToggleLeft className="w-3 h-3" /> Deactivate</> : <><ToggleRight className="w-3 h-3" /> Activate</>}
-                                                                        </button>
-                                                                    )}
-                                                                    <button
-                                                                        onClick={() => openPasswordModal(u)}
-                                                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-bold transition cursor-pointer"
-                                                                    >
-                                                                        <Key className="w-3 h-3" /> Password
-                                                                    </button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    ));
+                                                                </td>
+                                                                <td className="p-3 text-right">
+                                                                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                                                        {/* If Pending: Strictly show Approve & Reject buttons only */}
+                                                                        {isPending ? (
+                                                                            <>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => handleApproveUser(u)}
+                                                                                    disabled={processingUserId === u.id}
+                                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold transition disabled:opacity-50 cursor-pointer shadow-2xs"
+                                                                                    title="Approve User Registration"
+                                                                                >
+                                                                                    <UserCheck className="w-3 h-3" /> Approve
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => openRejectModal(u)}
+                                                                                    disabled={processingUserId === u.id}
+                                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-[11px] font-bold transition disabled:opacity-50 cursor-pointer shadow-2xs"
+                                                                                    title="Reject User Registration"
+                                                                                >
+                                                                                    <UserX className="w-3 h-3" /> Reject
+                                                                                </button>
+                                                                            </>
+                                                                        ) : isRejected ? (
+                                                                            <>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => handleApproveUser(u)}
+                                                                                    disabled={processingUserId === u.id}
+                                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] font-bold transition disabled:opacity-50 cursor-pointer shadow-2xs"
+                                                                                    title="Re-approve & Activate"
+                                                                                >
+                                                                                    <UserCheck className="w-3 h-3" /> Approve
+                                                                                </button>
+                                                                                {u.id !== user?.id && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => handleDeleteUser(u)}
+                                                                                        disabled={processingUserId === u.id}
+                                                                                        className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-rose-100 text-slate-600 hover:text-rose-700 rounded text-[11px] font-semibold transition disabled:opacity-50 cursor-pointer"
+                                                                                        title="Delete Rejected Account"
+                                                                                    >
+                                                                                        <Trash2 className="w-3 h-3" />
+                                                                                    </button>
+                                                                                )}
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                {u.id !== user?.id && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => handleToggleUserStatus(u)}
+                                                                                        disabled={processingUserId === u.id}
+                                                                                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-bold transition disabled:opacity-50 cursor-pointer ${u.is_active ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-slate-200 hover:bg-emerald-600 hover:text-white text-slate-700'}`}
+                                                                                    >
+                                                                                        {u.is_active ? <><ToggleLeft className="w-3 h-3" /> Deactivate</> : <><ToggleRight className="w-3 h-3" /> Activate</>}
+                                                                                    </button>
+                                                                                )}
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => openPasswordModal(u)}
+                                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[11px] font-bold transition cursor-pointer"
+                                                                                >
+                                                                                    <Key className="w-3 h-3" /> Password
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    });
                                                 })()}
                                             </tbody>
                                         </table>
                                     </div>
                                     {(() => {
                                         let filtered = usersList;
-                                        if (userTab === 'pending') filtered = filtered.filter(u => !u.is_active);
-                                        else if (userTab === 'active') filtered = filtered.filter(u => u.is_active);
+                                        if (userTab === 'pending') filtered = filtered.filter(u => !u.is_active && u.approval_status !== 'rejected');
+                                        else if (userTab === 'active') filtered = filtered.filter(u => u.is_active && u.approval_status !== 'rejected');
+                                        else if (userTab === 'rejected') filtered = filtered.filter(u => u.approval_status === 'rejected');
                                         if (userSearch) {
                                             const q = userSearch.toLowerCase();
                                             filtered = filtered.filter(u =>
@@ -1281,6 +1420,107 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                         </div>
                     </div>
                 )}
+                {/* Reject User Confirmation Modal */}
+                {isRejectModalOpen && selectedUserForReject && (
+                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={closeRejectModal}>
+                        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                            <div className="p-4 bg-rose-600 text-white flex items-center justify-between">
+                                <h3 className="font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+                                    <UserX className="w-4 h-4" />
+                                    Reject User Registration
+                                </h3>
+                                <button type="button" onClick={closeRejectModal} className="p-1 text-white/80 hover:text-white rounded-lg transition">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <form onSubmit={handleConfirmRejectUser} className="p-5 space-y-4">
+                                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                                    <div className="text-xs text-slate-500 uppercase font-semibold">User Details</div>
+                                    <div className="font-bold text-sm text-slate-900 mt-0.5">{selectedUserForReject.name}</div>
+                                    <div className="text-xs text-slate-600 font-mono">{selectedUserForReject.email}</div>
+                                    <div className="text-[11px] text-slate-500 mt-1">
+                                        Role: <span className="font-semibold text-slate-700">{selectedUserForReject.role}</span> • {selectedUserForReject.office?.name || 'Provincial Capitol'}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                        Reason for Rejection <span className="text-slate-400 font-normal">(Optional)</span>
+                                    </label>
+                                    <textarea
+                                        rows={3}
+                                        value={rejectReason}
+                                        onChange={e => setRejectReason(e.target.value)}
+                                        placeholder="State why this registration is rejected (e.g. Incomplete credentials, invalid office designation)..."
+                                        className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                                        maxLength={500}
+                                    />
+                                    <p className="text-[10px] text-slate-400 mt-1">
+                                        This reason will be recorded and shown in the rejected users tab and when the user attempts to log in.
+                                    </p>
+                                </div>
+                                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={closeRejectModal}
+                                        className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={rejectingUser}
+                                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+                                    >
+                                        <UserX className="w-3.5 h-3.5" />
+                                        {rejectingUser ? 'Rejecting...' : 'Confirm Rejection'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Signature Preview Modal */}
+                {signaturePreviewUser && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSignaturePreviewUser(null)}>
+                        <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+                            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <PenTool className="w-4 h-4 text-indigo-400" />
+                                    <span className="font-bold text-xs uppercase tracking-wider">Official Signature Preview</span>
+                                </div>
+                                <button type="button" onClick={() => setSignaturePreviewUser(null)} className="p-1 text-slate-400 hover:text-white rounded-lg transition">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                            <div className="p-5 text-center space-y-3">
+                                <div className="text-xs font-bold text-slate-800">{signaturePreviewUser.name}</div>
+                                <div className="text-[11px] text-slate-500 font-mono">{signaturePreviewUser.email}</div>
+                                <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 flex items-center justify-center min-h-[120px]">
+                                    <img
+                                        src={`/api/users/${signaturePreviewUser.id}/signature?t=${Date.now()}`}
+                                        alt={`Signature of ${signaturePreviewUser.name}`}
+                                        className="max-h-28 max-w-full object-contain"
+                                        onError={(e) => {
+                                            e.target.onerror = null;
+                                            e.target.src = '';
+                                            e.target.parentNode.innerHTML = '<span class="text-xs text-rose-500 font-medium">Failed to load signature image</span>';
+                                        }}
+                                    />
+                                </div>
+                                <div className="pt-2 flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSignaturePreviewUser(null)}
+                                        className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }
@@ -1376,7 +1616,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                     </>
                 )}
 
-                {user?.role === 'head' && (
+                {(user?.role === 'head' || user?.role === 'authorized_staff') && (
                     <>
                         <div className="bg-white p-4 rounded-xl border border-amber-200 shadow-xs flex items-center gap-3">
                             <div className="p-3 bg-amber-100 text-amber-700 rounded-lg">
@@ -1704,14 +1944,33 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                     )}
 
                     {/* Tab Switchers */}
-                    <div className="flex border-b border-slate-200 px-5 pt-3 bg-slate-50/50 gap-2">
+                    <div className="flex border-b border-slate-200 px-5 pt-3 bg-slate-50/50 gap-2 flex-wrap">
                         {(() => {
-                            const pendingCount = usersList.filter(u => !u.is_active).length;
-                            const activeCount = usersList.filter(u => u.is_active).length;
+                            const pendingCount = usersList.filter(u => !u.is_active && u.approval_status !== 'rejected').length;
+                            const activeCount = usersList.filter(u => u.is_active && u.approval_status !== 'rejected').length;
+                            const rejectedCount = usersList.filter(u => u.approval_status === 'rejected').length;
                             const totalCount = usersList.length;
 
                             return (
                                 <>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setUserTab('all');
+                                            setUserPage(1);
+                                        }}
+                                        className={`pb-3 px-3 text-xs font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 transition ${userTab === 'all'
+                                            ? 'border-blue-600 text-blue-600'
+                                            : 'border-transparent text-slate-500 hover:text-slate-800'
+                                            }`}
+                                    >
+                                        <Users className="w-3.5 h-3.5" />
+                                        All Users
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">
+                                            {totalCount}
+                                        </span>
+                                    </button>
+
                                     <button
                                         type="button"
                                         onClick={() => {
@@ -1724,7 +1983,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                             }`}
                                     >
                                         <Clock className="w-3.5 h-3.5" />
-                                        Pending Approval
+                                        Pending
                                         {pendingCount > 0 && (
                                             <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 animate-pulse">
                                                 {pendingCount}
@@ -1744,7 +2003,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                             }`}
                                     >
                                         <CheckCircle2 className="w-3.5 h-3.5" />
-                                        Active Users
+                                        Active
                                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">
                                             {activeCount}
                                         </span>
@@ -1753,19 +2012,21 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setUserTab('all');
+                                            setUserTab('rejected');
                                             setUserPage(1);
                                         }}
-                                        className={`pb-3 px-3 text-xs font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 transition ${userTab === 'all'
-                                            ? 'border-blue-600 text-blue-600'
+                                        className={`pb-3 px-3 text-xs font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 transition ${userTab === 'rejected'
+                                            ? 'border-rose-600 text-rose-600'
                                             : 'border-transparent text-slate-500 hover:text-slate-800'
                                             }`}
                                     >
-                                        <Users className="w-3.5 h-3.5" />
-                                        All Users
-                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700">
-                                            {totalCount}
-                                        </span>
+                                        <UserX className="w-3.5 h-3.5" />
+                                        Rejected Users
+                                        {rejectedCount > 0 && (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                                {rejectedCount}
+                                            </span>
+                                        )}
                                     </button>
                                 </>
                             );
@@ -1789,8 +2050,9 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                     const filteredUsers = usersList
                                         .filter((u) => {
                                             // Tab filter
-                                            if (userTab === 'pending') return !u.is_active;
-                                            if (userTab === 'active') return u.is_active;
+                                            if (userTab === 'pending') return !u.is_active && u.approval_status !== 'rejected';
+                                            if (userTab === 'active') return u.is_active && u.approval_status !== 'rejected';
+                                            if (userTab === 'rejected') return u.approval_status === 'rejected';
                                             return true; // 'all'
                                         })
                                         .filter((u) => {
@@ -1824,6 +2086,9 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
 
                                     return paginated.map((u) => {
                                         const isProcessing = processingUserId === u.id;
+                                        const isPending = !u.is_active && u.approval_status !== 'rejected';
+                                        const isRejected = u.approval_status === 'rejected';
+
                                         return (
                                             <tr key={u.id} className="hover:bg-slate-50 transition">
                                                 <td className="p-3">
@@ -1843,20 +2108,56 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                     )}
                                                 </td>
                                                 <td className="p-3">
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${u.role === 'admin' ? 'bg-red-100 text-red-800' :
-                                                        u.role === 'budget_officer' ? 'bg-indigo-100 text-indigo-800' :
-                                                            u.role === 'oppmo' ? 'bg-purple-100 text-purple-800' :
-                                                                u.role === 'twg' ? 'bg-cyan-100 text-cyan-800' :
-                                                                    u.role === 'head' ? 'bg-amber-100 text-amber-800' :
-                                                                        'bg-blue-100 text-blue-800'
-                                                        }`}>
-                                                        {u.role === 'admin' ? 'Administrator' :
-                                                            u.role === 'budget_officer' ? 'Budget Officer' :
-                                                                u.role === 'oppmo' ? 'OPPMO / Secretariat' :
-                                                                    u.role === 'twg' ? 'BAC-TWG Evaluator' :
-                                                                        u.role === 'head' ? 'Department Head' :
-                                                                            'End User'}
-                                                    </span>
+                                                    <div className="flex flex-col items-start gap-1">
+                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${u.role === 'admin' ? 'bg-red-100 text-red-800' :
+                                                            u.role === 'budget_officer' ? 'bg-indigo-100 text-indigo-800' :
+                                                                u.role === 'oppmo' ? 'bg-purple-100 text-purple-800' :
+                                                                    u.role === 'twg' ? 'bg-cyan-100 text-cyan-800' :
+                                                                        u.role === 'head' ? 'bg-amber-100 text-amber-800' :
+                                                                            u.role === 'authorized_staff' ? 'bg-teal-100 text-teal-800 border border-teal-300' :
+                                                                                'bg-blue-100 text-blue-800'
+                                                            }`}>
+                                                            {u.role === 'admin' ? 'Administrator' :
+                                                                u.role === 'budget_officer' ? 'Budget Officer' :
+                                                                    u.role === 'oppmo' ? 'OPPMO / Secretariat' :
+                                                                        u.role === 'twg' ? 'BAC-TWG Evaluator' :
+                                                                            u.role === 'head' ? 'Department Head' :
+                                                                                u.role === 'authorized_staff' ? 'Authorize Staff' :
+                                                                                    'End User'}
+                                                        </span>
+                                                        {/* Uploaded Documents for Authorized Staff */}
+                                                        {u.role === 'authorized_staff' && (
+                                                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                                                {u.authorization_letter_path ? (
+                                                                    <a
+                                                                        href={`/api/users/${u.id}/authorization-letter`}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        className="inline-flex items-center gap-1 text-[10px] text-teal-700 hover:text-teal-900 font-medium underline underline-offset-2 hover:bg-teal-50 px-1 py-0.5 rounded transition"
+                                                                        title="View Authorization Letter PDF"
+                                                                    >
+                                                                        <FileText className="w-3 h-3 text-teal-600 shrink-0" />
+                                                                        <span>Letter (PDF)</span>
+                                                                    </a>
+                                                                ) : (
+                                                                    <span className="text-[10px] text-amber-600 italic">No Letter PDF</span>
+                                                                )}
+                                                                {u.signature_path ? (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setSignaturePreviewUser(u)}
+                                                                        className="inline-flex items-center gap-1 text-[10px] text-indigo-700 hover:text-indigo-900 font-medium underline underline-offset-2 hover:bg-indigo-50 px-1 py-0.5 rounded transition cursor-pointer"
+                                                                        title="View Signature"
+                                                                    >
+                                                                        <PenTool className="w-3 h-3 text-indigo-600 shrink-0" />
+                                                                        <span>Signature</span>
+                                                                    </button>
+                                                                ) : (
+                                                                    <span className="text-[10px] text-slate-400 italic">No Signature</span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="p-3 text-slate-700">
                                                     <div className="font-medium truncate max-w-xs">{u.office?.name || 'Provincial Capitol'}</div>
@@ -1868,82 +2169,132 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                     {u.designation || 'Staff / Officer'}
                                                 </td>
                                                 <td className="p-3">
-                                                    {u.is_active ? (
+                                                    {isRejected ? (
+                                                        <div className="flex flex-col gap-0.5 items-start">
+                                                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                                                <UserX className="w-3 h-3 text-rose-600" />
+                                                                Rejected
+                                                            </span>
+                                                            {u.rejection_reason && (
+                                                                <span className="text-[10px] text-slate-500 max-w-xs truncate" title={u.rejection_reason}>
+                                                                    {u.rejection_reason}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : isPending ? (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 animate-pulse">
+                                                            <Clock className="w-3 h-3 text-amber-600" />
+                                                            Pending Approval
+                                                        </span>
+                                                    ) : (
                                                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
                                                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                                                             Active
-                                                        </span>
-                                                    ) : (
-                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                                                            <Clock className="w-3 h-3 text-amber-600" />
-                                                            Pending Approval
                                                         </span>
                                                     )}
                                                 </td>
                                                 <td className="p-3 text-right">
                                                     <div className="flex items-center justify-end gap-1.5 flex-wrap">
-                                                        {/* If Pending: Show Approve Button */}
-                                                        {!u.is_active && (
-                                                            <button
-                                                                type="button"
-                                                                disabled={isProcessing}
-                                                                onClick={() => handleApproveUser(u)}
-                                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer disabled:opacity-50"
-                                                                title="Approve & Activate Account"
-                                                            >
-                                                                <UserCheck className="w-3.5 h-3.5" />
-                                                                Approve
-                                                            </button>
-                                                        )}
-
-                                                        {/* Toggle Active / Deactivate */}
-                                                        {u.id !== user?.id && (
-                                                            <button
-                                                                type="button"
-                                                                disabled={isProcessing}
-                                                                onClick={() => handleToggleUserStatus(u)}
-                                                                className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-50 ${u.is_active
-                                                                    ? 'bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800'
-                                                                    : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
-                                                                    }`}
-                                                                title={u.is_active ? 'Deactivate Account' : 'Activate Account'}
-                                                            >
-                                                                {u.is_active ? (
-                                                                    <>
-                                                                        <ToggleRight className="w-3.5 h-3.5 text-emerald-600" />
-                                                                        Deactivate
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <ToggleLeft className="w-3.5 h-3.5 text-slate-400" />
-                                                                        Activate
-                                                                    </>
+                                                        {/* If Pending: Strictly show Approve and Reject only */}
+                                                        {isPending ? (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={isProcessing}
+                                                                    onClick={() => handleApproveUser(u)}
+                                                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer disabled:opacity-50"
+                                                                    title="Approve & Activate Account"
+                                                                >
+                                                                    <UserCheck className="w-3.5 h-3.5" />
+                                                                    Approve
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={isProcessing}
+                                                                    onClick={() => openRejectModal(u)}
+                                                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer disabled:opacity-50"
+                                                                    title="Reject Registration"
+                                                                >
+                                                                    <UserX className="w-3.5 h-3.5" />
+                                                                    Reject
+                                                                </button>
+                                                            </>
+                                                        ) : isRejected ? (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={isProcessing}
+                                                                    onClick={() => handleApproveUser(u)}
+                                                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer disabled:opacity-50"
+                                                                    title="Re-approve & Activate Account"
+                                                                >
+                                                                    <UserCheck className="w-3.5 h-3.5" />
+                                                                    Approve
+                                                                </button>
+                                                                {u.id !== user?.id && (
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={isProcessing}
+                                                                        onClick={() => handleDeleteUser(u)}
+                                                                        className="inline-flex items-center justify-center p-1.5 bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-700 rounded-lg transition shadow-2xs cursor-pointer disabled:opacity-50"
+                                                                        title="Delete Rejected Account"
+                                                                    >
+                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                    </button>
                                                                 )}
-                                                            </button>
-                                                        )}
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                {/* Toggle Active / Deactivate */}
+                                                                {u.id !== user?.id && (
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={isProcessing}
+                                                                        onClick={() => handleToggleUserStatus(u)}
+                                                                        className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-50 ${u.is_active
+                                                                            ? 'bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800'
+                                                                            : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
+                                                                            }`}
+                                                                        title={u.is_active ? 'Deactivate Account' : 'Activate Account'}
+                                                                    >
+                                                                        {u.is_active ? (
+                                                                            <>
+                                                                                <ToggleRight className="w-3.5 h-3.5 text-emerald-600" />
+                                                                                Deactivate
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <ToggleLeft className="w-3.5 h-3.5 text-slate-400" />
+                                                                                Activate
+                                                                            </>
+                                                                        )}
+                                                                    </button>
+                                                                )}
 
-                                                        {/* Change Password */}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openPasswordModal(u)}
-                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 rounded-lg text-xs font-semibold transition shadow-2xs cursor-pointer"
-                                                            title="Change Password"
-                                                        >
-                                                            <Key className="w-3.5 h-3.5" />
-                                                            Password
-                                                        </button>
+                                                                {/* Change Password */}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openPasswordModal(u)}
+                                                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 rounded-lg text-xs font-semibold transition shadow-2xs cursor-pointer"
+                                                                    title="Change Password"
+                                                                >
+                                                                    <Key className="w-3.5 h-3.5" />
+                                                                    Password
+                                                                </button>
 
-                                                        {/* Delete User */}
-                                                        {u.id !== user?.id && (
-                                                            <button
-                                                                type="button"
-                                                                disabled={isProcessing}
-                                                                onClick={() => handleDeleteUser(u)}
-                                                                className="inline-flex items-center justify-center p-1.5 bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-700 rounded-lg transition shadow-2xs cursor-pointer disabled:opacity-50"
-                                                                title="Delete User"
-                                                            >
-                                                                <Trash2 className="w-3.5 h-3.5" />
-                                                            </button>
+                                                                {/* Delete User */}
+                                                                {u.id !== user?.id && (
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled={isProcessing}
+                                                                        onClick={() => handleDeleteUser(u)}
+                                                                        className="inline-flex items-center justify-center p-1.5 bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-700 rounded-lg transition shadow-2xs cursor-pointer disabled:opacity-50"
+                                                                        title="Delete User"
+                                                                    >
+                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                )}
+                                                            </>
                                                         )}
                                                     </div>
                                                 </td>
@@ -1959,8 +2310,9 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                     {(() => {
                         const filteredUsers = usersList
                             .filter((u) => {
-                                if (userTab === 'pending') return !u.is_active;
-                                if (userTab === 'active') return u.is_active;
+                                if (userTab === 'pending') return !u.is_active && u.approval_status !== 'rejected';
+                                if (userTab === 'active') return u.is_active && u.approval_status !== 'rejected';
+                                if (userTab === 'rejected') return u.approval_status === 'rejected';
                                 return true;
                             })
                             .filter((u) => {
@@ -2289,7 +2641,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 dot: 'bg-emerald-500',
                             },
                         ];
-                    } else if (role === 'head') {
+                    } else if (role === 'head' || role === 'authorized_staff') {
                         // Office Head: All Office PPMPs, Pending Endorsement (actionable), Endorsed / Cleared, Returned with Remarks
                         tabs = [
                             {
@@ -2771,7 +3123,11 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                     <span className="font-mono text-[11px] text-slate-600 font-semibold" title="PPMP Number">
                                                         PPMP No. {ppmp.ppmp_number}
                                                     </span>
-                                                    {Number(ppmp.ppmp_number) > 0 && (
+                                                    {!ppmp.parent_id ? (
+                                                        <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold tracking-tight uppercase border bg-blue-100 text-blue-800 border-blue-300">
+                                                            Annual
+                                                        </span>
+                                                    ) : (
                                                         <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold tracking-tight uppercase border ${
                                                             ppmp.amendment_type === 'AMENDMENT'
                                                                 ? 'bg-purple-100 text-purple-800 border-purple-300'
@@ -3351,6 +3707,115 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 >
                                     <Check className="w-3.5 h-3.5" />
                                     {importing ? 'Importing Offices...' : `Execute Import (${importData.length} records)`}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Reject User Confirmation Modal */}
+            {isRejectModalOpen && selectedUserForReject && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4" onClick={closeRejectModal}>
+                    <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
+                        <div className="p-4 bg-rose-600 text-white flex items-center justify-between">
+                            <h3 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                                <UserX className="w-4 h-4" />
+                                Reject User Registration
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={closeRejectModal}
+                                className="text-white/80 hover:text-white p-1 rounded-md transition"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleConfirmRejectUser} className="p-6 space-y-4">
+                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                                <div className="text-xs text-slate-500 uppercase font-semibold">User Details</div>
+                                <div className="font-bold text-sm text-slate-900 mt-0.5">{selectedUserForReject.name}</div>
+                                <div className="text-xs text-slate-600 font-mono">{selectedUserForReject.email}</div>
+                                <div className="text-[11px] text-slate-500 mt-1">
+                                    Role: <span className="font-semibold text-slate-700">{selectedUserForReject.role}</span> • {selectedUserForReject.office?.name || 'Provincial Capitol'}
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                                    Reason for Rejection <span className="text-slate-400 font-normal lowercase">(optional)</span>:
+                                </label>
+                                <textarea
+                                    rows={3}
+                                    value={rejectReason}
+                                    onChange={(e) => setRejectReason(e.target.value)}
+                                    placeholder="Explain why this account registration was rejected..."
+                                    className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                                    maxLength={500}
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">
+                                    This reason will be recorded and visible to the applicant upon login.
+                                </p>
+                            </div>
+                            <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={closeRejectModal}
+                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={rejectingUser}
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition shadow-sm disabled:opacity-50 cursor-pointer"
+                                >
+                                    <UserX className="w-3.5 h-3.5" />
+                                    {rejectingUser ? 'Rejecting...' : 'Confirm Rejection'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Signature Preview Modal */}
+            {signaturePreviewUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4" onClick={() => setSignaturePreviewUser(null)}>
+                    <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
+                        <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+                            <h3 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
+                                <PenTool className="w-4 h-4 text-indigo-400" />
+                                Official Signature Preview
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={() => setSignaturePreviewUser(null)}
+                                className="text-slate-400 hover:text-white p-1 rounded-md transition"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="p-6 text-center space-y-3">
+                            <div className="text-sm font-bold text-slate-800">{signaturePreviewUser.name}</div>
+                            <div className="text-xs text-slate-500 font-mono">{signaturePreviewUser.email}</div>
+                            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 flex items-center justify-center min-h-[120px]">
+                                <img
+                                    src={`/api/users/${signaturePreviewUser.id}/signature?t=${Date.now()}`}
+                                    alt={`Signature of ${signaturePreviewUser.name}`}
+                                    className="max-h-28 max-w-full object-contain"
+                                    onError={(e) => {
+                                        e.target.onerror = null;
+                                        e.target.src = '';
+                                        e.target.parentNode.innerHTML = '<span class="text-xs text-rose-500 font-medium">Failed to load signature image</span>';
+                                    }}
+                                />
+                            </div>
+                            <div className="pt-2 flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setSignaturePreviewUser(null)}
+                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
+                                >
+                                    Close
                                 </button>
                             </div>
                         </div>

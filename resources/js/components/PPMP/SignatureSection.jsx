@@ -5,12 +5,45 @@ import { CheckCircle, ShieldCheck, PenTool } from 'lucide-react';
 export const SignatureSection = ({ ppmp, isPrintMode = false }) => {
     const signatures = ppmp?.signatures || [];
 
+    // If scope is ATTACHMENT_LIST only, PPMP / APP were NOT changed and retain approved baseline signatures from parent.
+    // If scope is PPMP_APP, ALL, or initial plan: PPMP / APP ARE being changed, so budget & oppmo reviewer signatures MUST BE NONE until they approve this child PPMP!
+    const isScopeAttachmentOnly = ppmp?.amendment_scope === 'ATTACHMENT_LIST';
+
+    // Reviewer signatures require review approval before their initial/signature is valid
+    const hasHeadApproved = Boolean(
+        ppmp?.head_approved_at ||
+        !['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'].includes(ppmp?.status)
+    );
+    const hasBudgetApproved = Boolean(
+        ppmp?.budget_approved_at ||
+        ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
+    );
+    const hasOppmoApproved = Boolean(
+        ppmp?.oppmo_approved_at ||
+        ['TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
+    );
+    const hasTwgApproved = Boolean(
+        ppmp?.ready_to_print_at ||
+        ppmp?.status === 'READY_TO_PRINT'
+    );
+
     // Signatures mapping
-    const preparedSig = signatures.find(s => s.role === 'end_user');
-    const headSig = signatures.find(s => s.role === 'head');
-    const budgetSig = signatures.find(s => s.role === 'budget_officer');
-    const oppmoSig = signatures.find(s => s.role === 'oppmo');
-    const twgSig = signatures.find(s => s.role === 'twg');
+    const preparedSig = signatures.find(s => s.role === 'end_user')
+        || (ppmp?.parent?.signatures?.find(s => s.role === 'end_user'))
+        || null;
+    const headSig = hasHeadApproved
+        ? (signatures.find(s => s.role === 'head') || (isScopeAttachmentOnly ? ppmp?.parent?.signatures?.find(s => s.role === 'head') : null))
+        : null;
+
+    const budgetSig = isScopeAttachmentOnly
+        ? (signatures.find(s => s.role === 'budget_officer') || ppmp?.parent?.signatures?.find(s => s.role === 'budget_officer') || null)
+        : (hasBudgetApproved ? signatures.find(s => s.role === 'budget_officer') : null);
+
+    const oppmoSig = isScopeAttachmentOnly
+        ? (signatures.find(s => s.role === 'oppmo') || ppmp?.parent?.signatures?.find(s => s.role === 'oppmo') || null)
+        : (hasOppmoApproved ? signatures.find(s => s.role === 'oppmo') : null);
+
+    const twgSig = hasTwgApproved ? signatures.find(s => s.role === 'twg') : null;
 
     return (
         <div className={`mt-6 border border-slate-900 bg-white ${isPrintMode ? 'print-signature-box' : 'shadow-sm rounded-lg overflow-hidden'}`}>

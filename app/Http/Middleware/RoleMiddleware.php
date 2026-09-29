@@ -31,6 +31,11 @@ class RoleMiddleware
             return $next($request);
         }
 
+        // authorized_staff acts on behalf of head
+        if ($user->role === 'authorized_staff' && in_array('head', $roles, true)) {
+            return $next($request);
+        }
+
         if (empty($roles) || in_array($user->role, $roles, true)) {
             return $next($request);
         }

@@ -21,7 +21,10 @@ class User extends Authenticatable
         'office_id',
         'designation',
         'signature_path',
+        'authorization_letter_path',
         'is_active',
+        'approval_status',
+        'rejection_reason',
     ];
 
     protected $hidden = [
@@ -60,7 +63,12 @@ class User extends Authenticatable
 
     public function isHead(): bool
     {
-        return $this->role === 'head';
+        return in_array($this->role, ['head', 'authorized_staff'], true);
+    }
+
+    public function isAuthorizedStaff(): bool
+    {
+        return $this->role === 'authorized_staff';
     }
 
     public function isBudgetOfficer(): bool

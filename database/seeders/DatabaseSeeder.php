@@ -20,7 +20,7 @@ class DatabaseSeeder extends Seeder
                 'name'         => 'System Administrator',
                 'password'     => Hash::make('++admin@2026.davsur++'),
                 'role'         => 'admin',
-                'designation'  => 'IT Systems Specialist',
+                'designation'  => 'System Administrator',
                 'is_active'    => true,
             ]
         );

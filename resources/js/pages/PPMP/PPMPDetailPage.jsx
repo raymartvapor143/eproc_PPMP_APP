@@ -49,6 +49,7 @@ export const PPMPDetailPage = ({
     const [isPrintView, setIsPrintView] = useState(false);
     const [isAttachmentListView, setIsAttachmentListView] = useState(false);
     const [isAppView, setIsAppView] = useState(false);
+    const [selectedAppPpmp, setSelectedAppPpmp] = useState(null);
     const [isRoutingPrintView, setIsRoutingPrintView] = useState(false);
     const [isItemsModalOpen, setIsItemsModalOpen] = useState(false);
     const [activeSubTab, setActiveSubTab] = useState('overview'); // overview, attachments, timeline
@@ -190,7 +191,7 @@ export const PPMPDetailPage = ({
 
     // Reviewer edit permission
     const isReviewerEditable = (
-        (user.role === 'head' && ['HEAD_PENDING', 'HEAD_APPROVED'].includes(ppmp.status) && user.office_id === ppmp.office_id) ||
+        ((user.role === 'head' || user.role === 'authorized_staff') && ['HEAD_PENDING', 'HEAD_APPROVED'].includes(ppmp.status) && user.office_id === ppmp.office_id) ||
         (user.role === 'budget_officer' && ppmp.status === 'BUDGET_OFFICER_REVIEW') ||
         (user.role === 'oppmo' && ppmp.status === 'OPPMO_REVIEW') ||
         (user.role === 'twg' && ppmp.status === 'TWG_REVIEW')
@@ -221,6 +222,17 @@ export const PPMPDetailPage = ({
 
     if (selectedPrintPpmp) {
         return <PPMPPrintView ppmp={selectedPrintPpmp} onBack={() => setSelectedPrintPpmp(null)} />;
+    }
+
+    if (selectedAppPpmp) {
+        return (
+            <APPPrintView
+                ppmp={selectedAppPpmp}
+                user={user}
+                canEdit={false}
+                onBack={() => setSelectedAppPpmp(null)}
+            />
+        );
     }
 
     if (isAppView) {
@@ -289,6 +301,9 @@ export const PPMPDetailPage = ({
     };
 
     const getReviewTargetName = (status) => {
+        if (ppmp?.amendment_scope === 'ATTACHMENT_LIST') {
+            return 'the BAC-TWG';
+        }
         switch (status) {
             case 'OPPMO_RETURNED':
                 return 'the OPPMO';
@@ -917,6 +932,29 @@ export const PPMPDetailPage = ({
                                                         <Maximize2 className="w-3.5 h-3.5" />
                                                         Full Review
                                                     </button>
+                                                    {isAnnualRoot ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setSelectedAppPpmp(histPpmp)}
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold uppercase tracking-wide transition shadow-2xs cursor-pointer"
+                                                            title="View Old / Annual Procurement Plan (APP)"
+                                                        >
+                                                            <History className="w-3.5 h-3.5" />
+                                                            Old APP
+                                                        </button>
+                                                    ) : (
+                                                        histPpmp.app_data && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSelectedAppPpmp(histPpmp)}
+                                                                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold uppercase tracking-wide transition shadow-2xs cursor-pointer"
+                                                                title="View Previous Procurement Plan (APP)"
+                                                            >
+                                                                <History className="w-3.5 h-3.5" />
+                                                                Previous APP
+                                                            </button>
+                                                        )
+                                                    )}
                                                     <button
                                                         type="button"
                                                         onClick={() => setSelectedPrintPpmp(histPpmp)}
@@ -1397,6 +1435,21 @@ export const PPMPDetailPage = ({
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">
+                                {(!selectedReviewPpmp.parent_id || selectedReviewPpmp.plan_type === 'ANNUAL') && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const toApp = selectedReviewPpmp;
+                                            setSelectedReviewPpmp(null);
+                                            setSelectedAppPpmp(toApp);
+                                        }}
+                                        className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-700 hover:bg-indigo-600 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition shadow-sm cursor-pointer"
+                                        title="View Old / Annual APP Data"
+                                    >
+                                        <History className="w-4 h-4" />
+                                        Old APP
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     onClick={() => {

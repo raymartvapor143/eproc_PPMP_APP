@@ -74,7 +74,11 @@ class UserController extends Controller
         }
 
         $targetUser = User::findOrFail($id);
-        $targetUser->update(['is_active' => true]);
+        $targetUser->update([
+            'is_active' => true,
+            'approval_status' => 'approved',
+            'rejection_reason' => null,
+        ]);
 
         AuditLog::log(
             'USER_APPROVED',
@@ -87,6 +91,45 @@ class UserController extends Controller
 
         return response()->json([
             'message' => "Account for {$targetUser->name} has been approved and activated.",
+            'user' => $targetUser->load('office'),
+        ]);
+    }
+
+    /**
+     * Reject a pending user registration (Admin only)
+     */
+    public function reject(Request $request, int $id): JsonResponse
+    {
+        $admin = $request->user();
+        if (!$admin->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        }
+
+        $targetUser = User::findOrFail($id);
+
+        $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $reason = $request->input('reason', 'Registration request rejected by Administrator.');
+
+        $targetUser->update([
+            'is_active' => false,
+            'approval_status' => 'rejected',
+            'rejection_reason' => $reason,
+        ]);
+
+        AuditLog::log(
+            'USER_REJECTED',
+            'users',
+            $targetUser->id,
+            null,
+            ['rejected_user_id' => $targetUser->id, 'email' => $targetUser->email, 'reason' => $reason],
+            $admin->id
+        );
+
+        return response()->json([
+            'message' => "Registration for {$targetUser->name} has been rejected.",
             'user' => $targetUser->load('office'),
         ]);
     }
@@ -174,7 +217,7 @@ class UserController extends Controller
         // Access Control: Allow self, admin, or official procurement signatories/reviewers
         $isSelf = $currentUser->id === $targetUser->id;
         $isAdmin = $currentUser->isAdmin();
-        $isOfficialSignatory = in_array($targetUser->role, ['head', 'budget_officer', 'oppmo', 'twg', 'admin'], true);
+        $isOfficialSignatory = in_array($targetUser->role, ['head', 'budget_officer', 'oppmo', 'twg', 'admin', 'authorized_staff'], true);
 
         if (!$isSelf && !$isAdmin && !$isOfficialSignatory) {
             // If target user is a regular end user, check if they prepared a PPMP that the current user has rights to view
@@ -202,6 +245,37 @@ class UserController extends Controller
 
         return response()->file($fullPath, [
             'Content-Type' => 'image/png',
+            'Cache-Control' => 'private, max-age=3600',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    /**
+     * Serve an authorized staff's official Authorization Letter PDF securely
+     */
+    public function getAuthorizationLetter(Request $request, int $id): \Symfony\Component\HttpFoundation\BinaryFileResponse|JsonResponse
+    {
+        $currentUser = $request->user();
+        $targetUser = User::findOrFail($id);
+
+        $isSelf = $currentUser->id === $targetUser->id;
+        $isAdmin = $currentUser->isAdmin();
+        $isOfficeHead = $currentUser->isHead() && $currentUser->office_id === $targetUser->office_id;
+        $isOfficial = in_array($currentUser->role, ['budget_officer', 'oppmo', 'twg'], true);
+
+        if (!$isSelf && !$isAdmin && !$isOfficeHead && !$isOfficial) {
+            return response()->json(['message' => 'Unauthorized. You do not have permission to view this authorization letter.'], 403);
+        }
+
+        if (!$targetUser->authorization_letter_path || !\Illuminate\Support\Facades\Storage::disk('local')->exists($targetUser->authorization_letter_path)) {
+            return response()->json(['message' => 'No authorization letter on file.'], 404);
+        }
+
+        $fullPath = \Illuminate\Support\Facades\Storage::disk('local')->path($targetUser->authorization_letter_path);
+
+        return response()->file($fullPath, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Authorization_Letter_' . preg_replace('/[^A-Za-z0-9_-]/', '_', $targetUser->name) . '.pdf"',
             'Cache-Control' => 'private, max-age=3600',
             'X-Content-Type-Options' => 'nosniff',
         ]);

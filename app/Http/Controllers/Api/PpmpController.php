@@ -113,16 +113,51 @@ class PpmpController extends Controller
         $officeId = $user->office_id ?? $validated['office_id'] ?? Office::first()->id;
 
         $ppmp = DB::transaction(function () use ($validated, $user, $officeId) {
-            // Generate unique Tracker Number: PPMP-YYYY-XXXXXX
+            // Resolve Office abbreviation code
+            $office = Office::find($officeId);
+            $rawOfficeCode = $office ? ($office->code ?? 'PPMO') : 'PPMO';
+            // Clean office code to alphanumeric and hyphens, uppercase
+            $officeCode = strtoupper(preg_replace('/[^A-Za-z0-9\-]/', '', str_replace(' ', '', $rawOfficeCode)));
+            if (empty($officeCode)) {
+                $officeCode = 'PPMO';
+            }
+
+            // Determine primary project procurement type from submitted items
+            $rawType = 'Goods';
+            if (!empty($validated['items'])) {
+                foreach ($validated['items'] as $item) {
+                    if (!empty($item['project_type'])) {
+                        $rawType = $item['project_type'];
+                        break;
+                    }
+                }
+            }
+
+            $rawTypeLower = strtolower($rawType);
+            if (str_contains($rawTypeLower, 'infra')) {
+                $typeCode = 'INFRA';
+            } elseif (str_contains($rawTypeLower, 'consult')) {
+                $typeCode = 'CONSULTING';
+            } else {
+                $typeCode = 'GOODS';
+            }
+
+            // Generate unique Tracker Number: {OFFICE}{TYPE}-{YEAR}-XXXXXX
             $year = $validated['fiscal_year'];
-            $latestInYear = Ppmp::where('fiscal_year', $year)->lockForUpdate()->count();
-            $nextSeq = str_pad($latestInYear + 1, 6, '0', STR_PAD_LEFT);
-            $trackingNumber = "PPMP-{$year}-{$nextSeq}";
+            $trackerPrefix = "{$officeCode}{$typeCode}-{$year}-";
+
+            // Count existing PPMPs with this prefix in this fiscal year to determine next sequence
+            $latestCount = Ppmp::where('fiscal_year', $year)
+                ->where('tracking_number', 'like', "{$trackerPrefix}%")
+                ->lockForUpdate()
+                ->count();
+            $nextSeq = str_pad($latestCount + 1, 6, '0', STR_PAD_LEFT);
+            $trackingNumber = "{$trackerPrefix}{$nextSeq}";
 
             // User input for PPMP Number (e.g. 0, 1, 2, 3...) or fallback to sequential index
             $ppmpNumber = isset($validated['ppmp_number']) && $validated['ppmp_number'] !== ''
                 ? (string) $validated['ppmp_number']
-                : (string) $latestInYear;
+                : (string) ($latestCount + 1);
 
             $ppmp = Ppmp::create([
                 'uuid' => (string) Str::uuid(),

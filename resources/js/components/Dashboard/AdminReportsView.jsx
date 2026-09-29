@@ -291,8 +291,25 @@ export const AdminReportsView = ({ recentPpmps, offices, onSelectPpmp }) => {
                                             <div className="font-mono font-bold text-blue-900">
                                                 {p.tracking_number || '-'}
                                             </div>
-                                            <div className="text-[10px] text-slate-500 font-mono">
-                                                PPMP: {p.ppmp_number || '-'}
+                                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                                <span className="text-[10px] text-slate-500 font-mono">
+                                                    PPMP: {p.ppmp_number !== undefined && p.ppmp_number !== null ? p.ppmp_number : '-'}
+                                                </span>
+                                                {p.ppmp_number !== undefined && p.ppmp_number !== null && (
+                                                    !p.parent_id ? (
+                                                        <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold tracking-tight uppercase border bg-blue-100 text-blue-800 border-blue-300">
+                                                            Annual
+                                                        </span>
+                                                    ) : (
+                                                        <span className={`inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold tracking-tight uppercase border ${
+                                                            p.amendment_type === 'AMENDMENT'
+                                                                ? 'bg-purple-100 text-purple-800 border-purple-300'
+                                                                : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                                        }`}>
+                                                            {p.amendment_type === 'AMENDMENT' ? 'Amended' : 'Supplemental'}
+                                                        </span>
+                                                    )
+                                                )}
                                             </div>
                                         </td>
                                         <td className="p-3">

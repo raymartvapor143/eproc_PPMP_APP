@@ -21,6 +21,7 @@ import {
     PenTool,
     Eraser,
     FileText,
+    FileUp,
     ShieldCheck,
     Sparkles,
     FileCheck2,
@@ -59,6 +60,9 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
         password: '',
         password_confirmation: '',
     });
+    const [authorizationLetter, setAuthorizationLetter] = useState(null);
+    const [authorizationLetterError, setAuthorizationLetterError] = useState('');
+    const authLetterInputRef = useRef(null);
     const [offices, setOffices] = useState([]);
     const [loadingOffices, setLoadingOffices] = useState(false);
 
@@ -253,6 +257,17 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
             return;
         }
 
+        if (registerData.role === 'authorized_staff') {
+            if (!authorizationLetter) {
+                setError('Please attach the official Authorization Letter (PDF) signed by the Office Head.');
+                return;
+            }
+            if (authorizationLetter.type !== 'application/pdf' && !authorizationLetter.name.toLowerCase().endsWith('.pdf')) {
+                setError('Only PDF documents are accepted for the Authorization Letter.');
+                return;
+            }
+        }
+
         if (!hasSignature || !signatureDataUrl) {
             setError('Please draw and capture your official specimen signature.');
             setIsSignatureModalOpen(true);
@@ -276,10 +291,22 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
             // Extract drawn signature data URL if drawn
             const finalSigUrl = hasSignature ? signatureDataUrl : null;
 
-            await authService.register({
-                ...registerData,
-                signature: finalSigUrl,
-            });
+            let payload;
+            if (authorizationLetter) {
+                payload = new FormData();
+                Object.keys(registerData).forEach((key) => {
+                    payload.append(key, registerData[key]);
+                });
+                payload.append('signature', finalSigUrl || '');
+                payload.append('authorization_letter', authorizationLetter);
+            } else {
+                payload = {
+                    ...registerData,
+                    signature: finalSigUrl,
+                };
+            }
+
+            await authService.register(payload);
             
             // Switch back to Login view
             setMode('login');
@@ -298,6 +325,9 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                 password: '',
                 password_confirmation: '',
             });
+            setAuthorizationLetter(null);
+            setAuthorizationLetterError('');
+            if (authLetterInputRef.current) authLetterInputRef.current.value = '';
             clearSignature();
             generateCaptcha();
 
@@ -949,6 +979,7 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                                 >
                                                     <option value="end_user">End User (Preparer)</option>
                                                     <option value="head">Office Head / Approver</option>
+                                                    <option value="authorized_staff">Authorize Staff</option>
                                                     <option value="budget_officer">Budget Officer</option>
                                                     <option value="oppmo">OPPMO Reviewer</option>
                                                     <option value="twg">BAC-TWG Reviewer</option>
@@ -1061,6 +1092,120 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                             </div>
                                         </div>
                                     </div>
+
+                                    {/* Official Authorization Letter (PDF) Card - Shown when role === 'authorized_staff' */}
+                                    {registerData.role === 'authorized_staff' && (
+                                        <div className="p-3.5 bg-blue-50/70 border-2 border-blue-300 rounded-xl space-y-2.5 shadow-sm animate-fade-in-up">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5">
+                                                    <FileText className="w-3.5 h-3.5 text-blue-700" />
+                                                    <span className="block text-[11px] font-bold text-blue-950 uppercase tracking-wider">
+                                                        Authorization Letter (PDF) <span className="text-rose-500">*</span>
+                                                    </span>
+                                                </div>
+                                                {authorizationLetter && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setAuthorizationLetter(null);
+                                                            setAuthorizationLetterError('');
+                                                            if (authLetterInputRef.current) authLetterInputRef.current.value = '';
+                                                        }}
+                                                        className="text-[11px] font-semibold text-rose-600 hover:text-rose-800 flex items-center gap-1 cursor-pointer transition px-1"
+                                                    >
+                                                        <Eraser className="w-3 h-3" />
+                                                        Remove
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <p className="text-[11px] text-blue-900 leading-relaxed font-medium">
+                                                As an Authorize Staff acting on behalf of the Office Head, you must attach the signed <strong>Official Authorization Letter (PDF)</strong>.
+                                            </p>
+
+                                            <input
+                                                ref={authLetterInputRef}
+                                                type="file"
+                                                accept="application/pdf,.pdf"
+                                                className="hidden"
+                                                id="authorization-letter-file-input"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (!file) return;
+
+                                                    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+                                                        setAuthorizationLetterError('Only official PDF files are accepted.');
+                                                        setAuthorizationLetter(null);
+                                                        return;
+                                                    }
+
+                                                    if (file.size > 20 * 1024 * 1024) {
+                                                        setAuthorizationLetterError('File size exceeds maximum limit of 20MB.');
+                                                        setAuthorizationLetter(null);
+                                                        return;
+                                                    }
+
+                                                    setAuthorizationLetterError('');
+                                                    setAuthorizationLetter(file);
+                                                }}
+                                            />
+
+                                            <div
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => authLetterInputRef.current?.click()}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        authLetterInputRef.current?.click();
+                                                    }
+                                                }}
+                                                className={`border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition select-none ${
+                                                    authorizationLetter
+                                                        ? 'border-emerald-400 bg-emerald-50/60 hover:bg-emerald-50'
+                                                        : 'border-blue-300 hover:border-blue-500 bg-white hover:bg-blue-50/40'
+                                                }`}
+                                            >
+                                                {authorizationLetter ? (
+                                                    <div className="flex items-center gap-3 w-full">
+                                                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 shadow-xs">
+                                                            <FileCheck2 className="w-5 h-5" />
+                                                        </div>
+                                                        <div className="min-w-0 flex-1 text-left">
+                                                            <div className="text-xs font-bold text-slate-900 truncate">
+                                                                {authorizationLetter.name}
+                                                            </div>
+                                                            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                                                {(authorizationLetter.size / 1024 / 1024).toFixed(2)} MB &bull; PDF Document Attached
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-[11px] font-bold text-blue-600 hover:underline shrink-0">
+                                                            Change
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center justify-center text-center">
+                                                        <div className="w-10 h-10 rounded-full bg-blue-100/80 text-blue-700 flex items-center justify-center mb-1.5 shadow-2xs">
+                                                            <FileUp className="w-5 h-5" />
+                                                        </div>
+                                                        <span className="text-xs font-bold text-blue-900">
+                                                            Click here to attach Authorization Letter (PDF)
+                                                        </span>
+                                                        <span className="text-[10px] text-blue-700/80 mt-0.5">
+                                                            PDF format up to 20MB &bull; Saved to secure private storage
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {authorizationLetterError && (
+                                                <p className="text-[11px] font-bold text-rose-600 flex items-center gap-1">
+                                                    <AlertCircle className="w-3.5 h-3.5" />
+                                                    {authorizationLetterError}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {/* Digital E-Signature Specimen Card (Click to Draw in Modal - Required) */}
                                     <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5 shadow-sm">

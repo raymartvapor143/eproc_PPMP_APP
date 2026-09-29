@@ -32,12 +32,14 @@ Route::prefix('api')->group(function () {
         Route::put('/profile', [AuthController::class, 'updateProfile']);
         Route::get('/profile/signature', [AuthController::class, 'getSignature'])->middleware('throttle:60,1');
         Route::get('/users/{id}/signature', [UserController::class, 'getSignature'])->middleware('throttle:60,1');
+        Route::get('/users/{id}/authorization-letter', [UserController::class, 'getAuthorizationLetter'])->middleware('throttle:60,1');
         Route::get('/dashboard', [DashboardController::class, 'index']);
 
         // Admin User Management
         Route::get('/users', [UserController::class, 'index'])->middleware('role:admin');
         Route::post('/users/{id}/change-password', [UserController::class, 'changePassword'])->middleware('role:admin');
         Route::post('/users/{id}/approve', [UserController::class, 'approve'])->middleware('role:admin');
+        Route::post('/users/{id}/reject', [UserController::class, 'reject'])->middleware('role:admin');
         Route::post('/users/{id}/toggle-status', [UserController::class, 'toggleStatus'])->middleware('role:admin');
         Route::delete('/users/{id}', [UserController::class, 'destroy'])->middleware('role:admin');
 

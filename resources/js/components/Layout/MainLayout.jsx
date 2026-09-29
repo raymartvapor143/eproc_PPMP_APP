@@ -243,6 +243,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
         switch (role) {
             case 'end_user': return 'End User / Project In-Charge';
             case 'head': return 'Department / Office Head';
+            case 'authorized_staff': return 'Authorize Staff (Acting Head)';
             case 'budget_officer': return 'Provincial Budget Officer';
             case 'oppmo': return 'OPPMO / BAC Secretariat';
             case 'twg': return 'BAC-TWG Evaluator';

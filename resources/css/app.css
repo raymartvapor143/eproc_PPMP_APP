@@ -234,6 +234,11 @@
 }
 
 /* Custom transitions and scrollbars */
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
 .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;

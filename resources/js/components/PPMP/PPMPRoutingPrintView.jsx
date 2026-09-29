@@ -92,7 +92,7 @@ export const PPMPRoutingPrintView = ({ ppmp, onBack }) => {
                 <div className="bg-slate-50 border border-slate-300 rounded-lg p-3.5 mb-5 text-xs grid grid-cols-2 sm:grid-cols-4 gap-3 print:bg-transparent print:border-slate-400">
                     <div>
                         <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">PPMP Tracking No.</span>
-                        <span className="font-mono font-bold text-slate-900 text-xs">{ppmp?.ppmp_number || '—'}</span>
+                        <span className="font-mono font-bold text-slate-900 text-xs">{ppmp?.tracking_number || ppmp?.ppmp_number || '—'}</span>
                     </div>
                     <div>
                         <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Fiscal Year / Type</span>

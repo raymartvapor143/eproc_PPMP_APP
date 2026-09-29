@@ -90,6 +90,7 @@ class PpmpWorkflowTest extends TestCase
         $createRes->assertStatus(201);
         $ppmpUuid = $createRes->json('ppmp.uuid');
         $this->assertEquals('DRAFT', $createRes->json('ppmp.status'));
+        $this->assertEquals('TEST-OFFICEGOODS-2026-000001', $createRes->json('ppmp.tracking_number'));
 
         // Verify End user e-signature exists
         $ppmp = Ppmp::where('uuid', $ppmpUuid)->first();
