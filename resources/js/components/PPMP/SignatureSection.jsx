@@ -145,18 +145,18 @@ export const SignatureSection = ({ ppmp, isPrintMode = false }) => {
                             <div className="inline-flex flex-col items-center">
                                 <div className="flex items-center justify-center gap-2">
                                     <span className="font-bold text-sm uppercase text-slate-900 underline decoration-slate-400 underline-offset-4">
-                                        {budgetSig.signer_name}
+                                        {ppmp?.default_signatories?.budget_requirement?.name || 'DESSAMIE BUAT-SANCHEZ, CPA, JD'}
                                     </span>
                                     {budgetSig?.user?.signature_path && (
                                         <img
                                             src={`/api/users/${budgetSig.user.id}/signature`}
-                                            alt="Signature"
+                                            alt="Initial Signature"
                                             className="h-8 max-w-[70px] object-contain"
                                         />
                                     )}
                                 </div>
                                 <div className="text-xs text-slate-600 font-medium mt-0.5">
-                                    {budgetSig.signer_designation || 'Provincial Budget Officer'}
+                                    {ppmp?.default_signatories?.budget_requirement?.position || 'PGDH - PBO / BAC - Chairman'}
                                 </div>
                                 <div className="flex items-center justify-center gap-1.5 mt-1">
                                     <span className="px-2 py-0.5 bg-indigo-100 border border-indigo-400 text-indigo-900 font-mono font-bold text-[10px] rounded">
@@ -170,13 +170,13 @@ export const SignatureSection = ({ ppmp, isPrintMode = false }) => {
                         ) : (
                             <div className="text-center py-1">
                                 <div className="font-bold text-sm uppercase text-slate-700">
-                                    {ppmp?.default_signatories?.budget_requirement?.name || 'Atty. Roberto G. Almendras, CPA'}
+                                    {ppmp?.default_signatories?.budget_requirement?.name || 'DESSAMIE BUAT-SANCHEZ, CPA, JD'}
                                 </div>
                                 <div className="text-xs text-slate-500 font-medium">
-                                    {ppmp?.default_signatories?.budget_requirement?.position || 'Provincial Budget Officer'}
+                                    {ppmp?.default_signatories?.budget_requirement?.position || 'PGDH - PBO / BAC - Chairman'}
                                 </div>
                                 <div className="text-[11px] text-amber-600 font-medium mt-1">
-                                    Pending Budget Officer
+                                    Pending Budget Officer Review
                                 </div>
                             </div>
                         )}
@@ -195,18 +195,18 @@ export const SignatureSection = ({ ppmp, isPrintMode = false }) => {
                             <div className="text-center">
                                 <div className="flex items-center justify-center gap-2">
                                     <span className="font-bold text-sm uppercase text-slate-900 underline decoration-slate-400 underline-offset-4">
-                                        {oppmoSig.signer_name}
+                                        {ppmp?.default_signatories?.bac_secretariat?.name || 'NORJANNA M. CAMAGUIN, MPA'}
                                     </span>
                                     {oppmoSig?.user?.signature_path && (
                                         <img
                                             src={`/api/users/${oppmoSig.user.id}/signature`}
-                                            alt="Signature"
+                                            alt="Initial Signature"
                                             className="h-8 max-w-[70px] object-contain"
                                         />
                                     )}
                                 </div>
                                 <div className="text-[11px] text-slate-600 mt-0.5">
-                                    {oppmoSig.signer_designation || 'HEAD OF BAC SECRETARIAT / OPPMO'}
+                                    {ppmp?.default_signatories?.bac_secretariat?.position || 'PGDH - OPPMO'}
                                 </div>
                                 <div className="flex items-center justify-center gap-1.5 mt-1">
                                     <span className="px-2 py-0.5 bg-purple-100 border border-purple-400 text-purple-900 font-mono font-bold text-[10px] rounded">
@@ -220,10 +220,10 @@ export const SignatureSection = ({ ppmp, isPrintMode = false }) => {
                         ) : (
                             <div className="text-center py-1">
                                 <div className="font-bold text-sm uppercase text-slate-700">
-                                    {ppmp?.default_signatories?.bac_secretariat?.name || 'Mr. Christopher B. Ramos'}
+                                    {ppmp?.default_signatories?.bac_secretariat?.name || 'NORJANNA M. CAMAGUIN, MPA'}
                                 </div>
                                 <div className="text-[11px] text-slate-500 font-medium">
-                                    {ppmp?.default_signatories?.bac_secretariat?.position || 'Head of BAC Secretariat / OPPMO'}
+                                    {ppmp?.default_signatories?.bac_secretariat?.position || 'PGDH - OPPMO'}
                                 </div>
                                 <div className="text-[11px] text-amber-600 font-medium mt-0.5">
                                     Pending BAC Secretariat Review

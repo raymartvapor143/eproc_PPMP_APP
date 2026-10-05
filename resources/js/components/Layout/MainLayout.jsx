@@ -24,10 +24,14 @@ import {
     Mail,
     Save,
     AlertCircle,
+    AlertTriangle,
     CheckCircle2,
     Loader2,
     Inbox,
     Maximize2,
+    Clock,
+    Trash2,
+    Info,
 } from 'lucide-react';
 import { SignaturePadModal } from '../UI/SignaturePadModal';
 
@@ -40,6 +44,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
     const [loadingAllNotifs, setLoadingAllNotifs] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const notifDropdownRef = React.useRef(null);
+    const notifContainerRef = React.useRef(null);
 
     const loadNotifications = async () => {
         try {
@@ -158,7 +163,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
     // Close notification dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
-            if (notifDropdownRef.current && !notifDropdownRef.current.contains(event.target)) {
+            if (notifContainerRef.current && !notifContainerRef.current.contains(event.target)) {
                 setShowNotifMenu(false);
             }
         };
@@ -166,16 +171,82 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const formatTimeAgo = (dateStr) => {
+        if (!dateStr) return '';
+        const diffMs = Date.now() - new Date(dateStr).getTime();
+        const diffSec = Math.floor(diffMs / 1000);
+        if (diffSec < 60) return 'Just now';
+        const diffMin = Math.floor(diffSec / 60);
+        if (diffMin < 60) return `${diffMin}m ago`;
+        const diffHour = Math.floor(diffMin / 60);
+        if (diffHour < 24) return `${diffHour}h ago`;
+        const diffDay = Math.floor(diffHour / 24);
+        if (diffDay < 7) return `${diffDay}d ago`;
+        return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    const getNotifTypeBadge = (type, isUnread) => {
+        let colorClass = 'bg-blue-500 ring-blue-200';
+        let titleText = 'Notice';
+
+        if (type === 'success') {
+            colorClass = 'bg-emerald-500 ring-emerald-200';
+            titleText = 'Approved / Completed';
+        } else if (type === 'warning') {
+            colorClass = 'bg-amber-500 ring-amber-200';
+            titleText = 'Returned / Warning';
+        } else if (type === 'danger') {
+            colorClass = 'bg-rose-500 ring-rose-200';
+            titleText = 'Action Required';
+        }
+
+        return (
+            <span
+                className={`w-2 h-2 rounded-full ${colorClass} shrink-0 ${isUnread ? 'ring-2 animate-pulse' : 'opacity-70'}`}
+                title={titleText}
+            />
+        );
+    };
+
     const handleMarkAllRead = async () => {
         try {
-            await notificationService.markAllAsRead();
-            loadNotifications();
+            setNotifications((prev) =>
+                prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }))
+            );
             setAllNotifications((prev) =>
                 prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }))
             );
             setUnreadCount(0);
+            await notificationService.markAllAsRead();
         } catch (e) {
-            console.error(e);
+            console.error('Failed to mark all read', e);
+            loadNotifications();
+        }
+    };
+
+    const handleDismissNotification = async (e, notifId) => {
+        e.stopPropagation();
+        try {
+            setNotifications((prev) => prev.filter((n) => n.id !== notifId));
+            setAllNotifications((prev) => prev.filter((n) => n.id !== notifId));
+            setUnreadCount((prev) => Math.max(0, prev - 1));
+            await notificationService.delete(notifId);
+        } catch (err) {
+            console.error('Failed to dismiss notification', err);
+            loadNotifications();
+        }
+    };
+
+    const handleClearAllNotifications = async () => {
+        if (!window.confirm('Are you sure you want to clear all notifications?')) return;
+        try {
+            setNotifications([]);
+            setAllNotifications([]);
+            setUnreadCount(0);
+            await notificationService.clearAll();
+        } catch (err) {
+            console.error('Failed to clear all notifications', err);
+            loadNotifications();
         }
     };
 
@@ -234,6 +305,13 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
             }
         }
 
+        if (['admin', 'super_admin'].includes(user?.role) && (notif.title?.toLowerCase().includes('user') || notif.message?.toLowerCase().includes('registered'))) {
+            if (onNavigate) {
+                onNavigate('users');
+                return;
+            }
+        }
+
         if (onNavigate) {
             onNavigate('dashboard');
         }
@@ -247,7 +325,8 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
             case 'budget_officer': return 'Provincial Budget Officer';
             case 'oppmo': return 'OPPMO / BAC Secretariat';
             case 'twg': return 'BAC-TWG Evaluator';
-            case 'admin': return 'System Administrator';
+            case 'super_admin': return 'Super Administrator';
+            case 'admin': return 'Administrator';
             default: return role;
         }
     };
@@ -302,7 +381,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                         {/* Right: Notifications & User Profile */}
                         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
                             {/* Notification Bell */}
-                            <div className="relative">
+                            <div className="relative" ref={notifContainerRef}>
                                 <button
                                     onClick={() => setShowNotifMenu(!showNotifMenu)}
                                     className="p-1.5 sm:p-2 text-slate-300 hover:text-white relative rounded-full hover:bg-slate-800 transition"
@@ -359,13 +438,19 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                                             }`}
                                                         >
                                                             <div className="min-w-0 flex-1">
-                                                                <div className="flex items-center gap-1.5 mb-1">
-                                                                    {!n.read_at && (
-                                                                        <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+                                                                <div className="flex items-center justify-between gap-1.5 mb-1">
+                                                                    <div className="flex items-center gap-1.5 min-w-0">
+                                                                        {getNotifTypeBadge(n.type, !n.read_at)}
+                                                                        <span className="font-bold text-slate-900 group-hover:text-blue-600 transition truncate">
+                                                                            {n.title}
+                                                                        </span>
+                                                                    </div>
+                                                                    {n.created_at && (
+                                                                        <span className="text-[10px] text-slate-400 shrink-0 font-medium flex items-center gap-0.5">
+                                                                            <Clock className="w-2.5 h-2.5" />
+                                                                            {formatTimeAgo(n.created_at)}
+                                                                        </span>
                                                                     )}
-                                                                    <span className="font-bold text-slate-900 group-hover:text-blue-600 transition">
-                                                                        {n.title}
-                                                                    </span>
                                                                 </div>
                                                                 <p className="text-slate-600 text-[11px] leading-relaxed">
                                                                     {n.message ? (n.ppmp?.tracking_number ? n.message.replace(/PPMP\s+0(?!\d)/g, `PPMP ${n.ppmp.tracking_number}`) : n.message) : ''}
@@ -378,11 +463,21 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                                                 )}
                                                             </div>
 
-                                                            {hasShortcut && (
-                                                                <div className="p-1.5 bg-white group-hover:bg-blue-600 group-hover:text-white text-slate-400 rounded-lg shadow-2xs border border-slate-200 group-hover:border-blue-600 transition shrink-0 mt-0.5">
-                                                                    <ExternalLink className="w-3.5 h-3.5" />
-                                                                </div>
-                                                            )}
+                                                            <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                                                                {hasShortcut && (
+                                                                    <div className="p-1.5 bg-white group-hover:bg-blue-600 group-hover:text-white text-slate-400 rounded-lg shadow-2xs border border-slate-200 group-hover:border-blue-600 transition">
+                                                                        <ExternalLink className="w-3.5 h-3.5" />
+                                                                    </div>
+                                                                )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => handleDismissNotification(e, n.id)}
+                                                                    title="Dismiss notification"
+                                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-slate-200/60 rounded-md transition"
+                                                                >
+                                                                    <X className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     );
                                                 })
@@ -983,7 +1078,18 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                             className="px-2.5 py-1 text-[11px] font-semibold bg-slate-800 hover:bg-slate-700 text-blue-300 hover:text-white rounded-lg transition cursor-pointer"
                                             title="Mark all notifications as read"
                                         >
-                                            Mark all as read
+                                            Mark all read
+                                        </button>
+                                    )}
+                                    {(allNotifications.length > 0 || notifications.length > 0) && (
+                                        <button
+                                            type="button"
+                                            onClick={handleClearAllNotifications}
+                                            className="px-2.5 py-1 text-[11px] font-semibold bg-rose-950/80 hover:bg-rose-900 text-rose-300 hover:text-rose-100 rounded-lg transition cursor-pointer flex items-center gap-1 border border-rose-800/60"
+                                            title="Clear all notifications"
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                            <span>Clear all</span>
                                         </button>
                                     )}
                                     <button
@@ -1023,21 +1129,35 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                                 }`}
                                             >
                                                 <div className="min-w-0 flex-1">
-                                                    <div className="flex items-center gap-2 mb-1.5">
-                                                        {!n.read_at ? (
-                                                            <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0 ring-2 ring-blue-200" />
-                                                        ) : (
-                                                            <span className="w-2 h-2 rounded-full bg-slate-300 shrink-0" />
-                                                        )}
-                                                        <span className="font-bold text-slate-900 group-hover:text-blue-600 transition text-[13px] leading-snug">
-                                                            {n.title}
-                                                        </span>
+                                                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            {getNotifTypeBadge(n.type, !n.read_at)}
+                                                            <span className="font-bold text-slate-900 group-hover:text-blue-600 transition text-[13px] leading-snug">
+                                                                {n.title}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 shrink-0">
+                                                            {n.created_at && (
+                                                                <span className="text-slate-400 font-medium text-[11px] flex items-center gap-1">
+                                                                    <Clock className="w-3 h-3" />
+                                                                    {formatTimeAgo(n.created_at)}
+                                                                </span>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => handleDismissNotification(e, n.id)}
+                                                                title="Dismiss notification"
+                                                                className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 hover:bg-slate-200/60 rounded-md transition ml-1"
+                                                            >
+                                                                <X className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <p className="text-slate-600 text-xs leading-relaxed pl-4.5">
+                                                    <p className="text-slate-600 text-xs leading-relaxed pl-4">
                                                         {n.message ? (n.ppmp?.tracking_number ? n.message.replace(/PPMP\s+0(?!\d)/g, `PPMP ${n.ppmp.tracking_number}`) : n.message) : ''}
                                                     </p>
 
-                                                    <div className="mt-2.5 flex items-center justify-between pl-4.5 text-[11px]">
+                                                    <div className="mt-2.5 flex items-center justify-between pl-4 text-[11px]">
                                                         {n.created_at && (
                                                             <span className="text-slate-400 font-mono text-[10px]">
                                                                 {new Date(n.created_at).toLocaleString()}

@@ -21,24 +21,24 @@ export const isAwaitingReceive = (ppmp, user) => {
 
     // When an End User submits an Amendment / Supplemental request, it routes to Admin for approval
     if (ppmp.amendment_status === 'PENDING_APPROVAL') {
-        return role === 'admin' && !ppmp.admin_received_at;
+        return ['admin', 'super_admin'].includes(role) && !ppmp.admin_received_at;
     }
 
     if (status === 'HEAD_PENDING') {
         const isTargetHead = (role === 'head' || role === 'authorized_staff') && (user.office_id === ppmp.office_id || !ppmp.office_id);
-        return (isTargetHead || role === 'admin') && !ppmp.head_received_at;
+        return isTargetHead && !ppmp.head_received_at;
     }
 
     if (status === 'BUDGET_OFFICER_REVIEW') {
-        return (role === 'budget_officer' || role === 'admin') && !ppmp.budget_received_at;
+        return role === 'budget_officer' && !ppmp.budget_received_at;
     }
 
     if (status === 'OPPMO_REVIEW') {
-        return (role === 'oppmo' || role === 'admin') && !ppmp.oppmo_received_at;
+        return role === 'oppmo' && !ppmp.oppmo_received_at;
     }
 
     if (status === 'TWG_REVIEW') {
-        return (role === 'twg' || role === 'admin') && !ppmp.twg_received_at;
+        return role === 'twg' && !ppmp.twg_received_at;
     }
 
     if ([
@@ -50,7 +50,7 @@ export const isAwaitingReceive = (ppmp, user) => {
         'TWG_RETURNED'
     ].includes(status)) {
         const isCreator = ppmp.created_by === user.id;
-        return (isCreator || role === 'admin') && !ppmp.enduser_received_at;
+        return isCreator && !ppmp.enduser_received_at;
     }
 
     return false;
@@ -78,28 +78,28 @@ export const getStageReceiptInfo = (ppmp, user) => {
         recipientRole = 'Administrator';
         isReceived = Boolean(ppmp.admin_received_at);
         receivedAt = ppmp.admin_received_at;
-        canCurrentUserReceive = role === 'admin' && !isReceived;
+        canCurrentUserReceive = ['admin', 'super_admin'].includes(role) && !isReceived;
     } else if (status === 'HEAD_PENDING') {
         recipientRole = 'Office Head';
         isReceived = Boolean(ppmp.head_received_at);
         receivedAt = ppmp.head_received_at;
         const isTargetHead = (role === 'head' || role === 'authorized_staff') && (user?.office_id === ppmp.office_id || !ppmp.office_id);
-        canCurrentUserReceive = (isTargetHead || role === 'admin') && !isReceived;
+        canCurrentUserReceive = (isTargetHead || ['admin', 'super_admin'].includes(role)) && !isReceived;
     } else if (status === 'BUDGET_OFFICER_REVIEW') {
         recipientRole = 'Budget Officer';
         isReceived = Boolean(ppmp.budget_received_at);
         receivedAt = ppmp.budget_received_at;
-        canCurrentUserReceive = (role === 'budget_officer' || role === 'admin') && !isReceived;
+        canCurrentUserReceive = (role === 'budget_officer' || ['admin', 'super_admin'].includes(role)) && !isReceived;
     } else if (status === 'OPPMO_REVIEW') {
         recipientRole = 'OPPMO';
         isReceived = Boolean(ppmp.oppmo_received_at);
         receivedAt = ppmp.oppmo_received_at;
-        canCurrentUserReceive = (role === 'oppmo' || role === 'admin') && !isReceived;
+        canCurrentUserReceive = (role === 'oppmo' || ['admin', 'super_admin'].includes(role)) && !isReceived;
     } else if (status === 'TWG_REVIEW') {
         recipientRole = 'TWG';
         isReceived = Boolean(ppmp.twg_received_at);
         receivedAt = ppmp.twg_received_at;
-        canCurrentUserReceive = (role === 'twg' || role === 'admin') && !isReceived;
+        canCurrentUserReceive = (role === 'twg' || ['admin', 'super_admin'].includes(role)) && !isReceived;
     } else if ([
         'HEAD_APPROVED',
         'READY_TO_PRINT',
@@ -112,7 +112,7 @@ export const getStageReceiptInfo = (ppmp, user) => {
         isReceived = Boolean(ppmp.enduser_received_at);
         receivedAt = ppmp.enduser_received_at;
         const isCreator = user && ppmp.created_by === user.id;
-        canCurrentUserReceive = (isCreator || role === 'admin') && !isReceived;
+        canCurrentUserReceive = (isCreator || ['admin', 'super_admin'].includes(role)) && !isReceived;
     }
 
     if (!recipientRole) return null;

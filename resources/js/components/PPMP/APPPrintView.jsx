@@ -48,7 +48,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
         (user?.role === 'twg' && ppmp?.status === 'TWG_REVIEW')
     );
 
-    const allowEdit = canEdit && (isCreatorEditable || isReviewerEditable || user?.role === 'admin');
+    const allowEdit = canEdit && (isCreatorEditable || isReviewerEditable || ['admin', 'super_admin'].includes(user?.role));
 
     const [isEditing, setIsEditing] = useState(!savedData && allowEdit);
     const [saving, setSaving] = useState(false);
@@ -110,13 +110,11 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
     const [preparedByName, setPreparedByName] = useState(
         savedData?.prepared_by_name ||
         ppmp?.default_signatories?.bac_secretariat?.name ||
-        oppmoSig?.signer_name ||
         'NORJANNA M. CAMAGUIN, MPA'
     );
     const [preparedByPosition, setPreparedByPosition] = useState(
         savedData?.prepared_by_position ||
         ppmp?.default_signatories?.bac_secretariat?.position ||
-        oppmoSig?.signer_designation ||
         'PGDH - OPPMO'
     );
 
@@ -124,14 +122,12 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
     const [recommendingName, setRecommendingName] = useState(
         savedData?.recommending_name ||
         ppmp?.default_signatories?.budget_requirement?.name ||
-        budgetSig?.signer_name ||
-        'DESSAMIE BUAT SANCHEZ, CPA, JD'
+        'DESSAMIE BUAT-SANCHEZ, CPA, JD'
     );
     const [recommendingPosition, setRecommendingPosition] = useState(
         savedData?.recommending_position ||
         ppmp?.default_signatories?.budget_requirement?.position ||
-        budgetSig?.signer_designation ||
-        'PGDH - PBO / BAC CHAIRMAN'
+        'PGDH - PBO / BAC - Chairman'
     );
 
     // Approved by: Governor

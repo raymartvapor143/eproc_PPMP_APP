@@ -8,6 +8,7 @@ import { AdminSidebar } from '../../components/Dashboard/AdminSidebar';
 import { AdminVisualAnalytics } from '../../components/Dashboard/AdminVisualAnalytics';
 import { AdminReportsView } from '../../components/Dashboard/AdminReportsView';
 import { AdminActivityLog } from '../../components/Dashboard/AdminActivityLog';
+import { AdminDashboard } from './AdminDashboard';
 import {
     FileText,
     Clock,
@@ -593,8 +594,21 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
     const activeUsersCount = usersList.filter(u => u.is_active && u.approval_status !== 'rejected').length;
     const rejectedUsersCount = usersList.filter(u => u.approval_status === 'rejected').length;
 
-    // ─── ADMIN EARLY RETURN ───────────────────────────────────────────────────
+    // ─── ADMIN EARLY RETURN (Dedicated Dashboard: Users, Amendments, System Logs, PPMP List) ───
     if (user?.role === 'admin') {
+        return (
+            <AdminDashboard
+                data={data}
+                user={user}
+                onSelectPpmp={onSelectPpmp}
+                onNavigate={onNavigate}
+                onReload={onReload}
+            />
+        );
+    }
+
+    // ─── SUPER ADMIN EARLY RETURN (Full Executive Analytics, Reports, Offices, Signatories) ───
+    if (user?.role === 'super_admin') {
         // Shared: Signatories panel JSX
         const SignatoriesPanel = (
             <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
@@ -744,10 +758,10 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-xl border border-slate-200 shadow-xs">
                         <div>
                             <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                                Admin Portal — {user?.name}
+                                Super Admin Portal — {user?.name}
                             </h1>
                             <p className="text-xs text-slate-500 mt-1">
-                                System Administration &amp; Analytics • E-Procurement Management
+                                System Executive Administration &amp; Analytics • E-Procurement Management
                             </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -911,7 +925,8 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                                 <td className="p-3">
                                                                     <div className="flex flex-col items-start gap-1">
                                                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                                                                            u.role === 'admin' ? 'bg-rose-100 text-rose-800' :
+                                                                            u.role === 'super_admin' ? 'bg-rose-100 text-rose-800 border border-rose-300 font-bold' :
+                                                                            u.role === 'admin' ? 'bg-blue-100 text-blue-800 font-bold' :
                                                                             u.role === 'budget_officer' ? 'bg-indigo-100 text-indigo-800' :
                                                                             u.role === 'oppmo' ? 'bg-purple-100 text-purple-800' :
                                                                             u.role === 'twg' ? 'bg-amber-100 text-amber-800' :
@@ -919,7 +934,8 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                                             u.role === 'authorized_staff' ? 'bg-teal-100 text-teal-800 border border-teal-300' :
                                                                             'bg-slate-100 text-slate-700'
                                                                         }`}>
-                                                                            {u.role === 'admin' ? 'Administrator' :
+                                                                            {u.role === 'super_admin' ? 'Super Administrator' :
+                                                                             u.role === 'admin' ? 'Administrator' :
                                                                              u.role === 'budget_officer' ? 'Budget Officer' :
                                                                              u.role === 'oppmo' ? 'OPPMO' :
                                                                              u.role === 'twg' ? 'TWG' :

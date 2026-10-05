@@ -33,8 +33,7 @@ export const ReviewPanel = ({
         ppmp.status === 'TWG_REVIEW' ? 'twg' : null
     );
 
-    // Determine current reviewer role vs PPMP status (Admin can also act on behalf of the stage)
-    const isAdmin = userRole === 'admin' || user?.role === 'admin';
+    const isAdmin = ['admin', 'super_admin'].includes(userRole) || ['admin', 'super_admin'].includes(user?.role);
     let effectiveRole = isAdmin && targetStageRole ? targetStageRole : userRole;
     if (effectiveRole === 'authorized_staff') {
         effectiveRole = 'head';

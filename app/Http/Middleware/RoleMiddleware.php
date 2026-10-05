@@ -26,8 +26,8 @@ class RoleMiddleware
             return response()->json(['message' => 'Account is inactive. Please contact your administrator.'], 403);
         }
 
-        // Admin can access everything
-        if ($user->isAdmin()) {
+        // Super Admin can access everything
+        if ($user->isSuperAdmin()) {
             return $next($request);
         }
 

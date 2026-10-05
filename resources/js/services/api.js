@@ -182,6 +182,8 @@ export const notificationService = {
     getAll: (params) => api.get('/notifications', { params }),
     markAsRead: (id) => api.post(`/notifications/${id}/read`),
     markAllAsRead: () => api.post('/notifications/read-all'),
+    delete: (id) => api.delete(`/notifications/${id}`),
+    clearAll: () => api.delete('/notifications'),
     getOffices: () => api.get('/offices'),
 };
 
@@ -195,6 +197,7 @@ export const signatoryService = {
 export const userService = {
     getAll: () => api.get('/users'),
     changePassword: (id, password) => api.post(`/users/${id}/change-password`, { password }),
+    updateRole: (id, role) => api.put(`/users/${id}/role`, { role }),
     approve: (id) => api.post(`/users/${id}/approve`),
     reject: (id, reason = '') => api.post(`/users/${id}/reject`, { reason }),
     toggleStatus: (id) => api.post(`/users/${id}/toggle-status`),

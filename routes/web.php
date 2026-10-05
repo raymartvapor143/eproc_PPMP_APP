@@ -35,31 +35,34 @@ Route::prefix('api')->group(function () {
         Route::get('/users/{id}/authorization-letter', [UserController::class, 'getAuthorizationLetter'])->middleware('throttle:60,1');
         Route::get('/dashboard', [DashboardController::class, 'index']);
 
-        // Admin User Management
-        Route::get('/users', [UserController::class, 'index'])->middleware('role:admin');
-        Route::post('/users/{id}/change-password', [UserController::class, 'changePassword'])->middleware('role:admin');
-        Route::post('/users/{id}/approve', [UserController::class, 'approve'])->middleware('role:admin');
-        Route::post('/users/{id}/reject', [UserController::class, 'reject'])->middleware('role:admin');
-        Route::post('/users/{id}/toggle-status', [UserController::class, 'toggleStatus'])->middleware('role:admin');
-        Route::delete('/users/{id}', [UserController::class, 'destroy'])->middleware('role:admin');
+        // Admin & Super Admin User Management
+        Route::get('/users', [UserController::class, 'index'])->middleware('role:admin,super_admin');
+        Route::post('/users/{id}/change-password', [UserController::class, 'changePassword'])->middleware('role:admin,super_admin');
+        Route::post('/users/{id}/approve', [UserController::class, 'approve'])->middleware('role:admin,super_admin');
+        Route::post('/users/{id}/reject', [UserController::class, 'reject'])->middleware('role:admin,super_admin');
+        Route::post('/users/{id}/toggle-status', [UserController::class, 'toggleStatus'])->middleware('role:admin,super_admin');
+        Route::put('/users/{id}/role', [UserController::class, 'updateRole'])->middleware('role:admin,super_admin');
+        Route::delete('/users/{id}', [UserController::class, 'destroy'])->middleware('role:admin,super_admin');
 
-        // Admin Office Management & CSV/Excel Batch Import
+        // Super Admin Office Management & CSV/Excel Batch Import
         Route::get('/offices-list', [OfficeController::class, 'index']);
-        Route::post('/offices', [OfficeController::class, 'store'])->middleware('role:admin');
-        Route::put('/offices/{id}', [OfficeController::class, 'update'])->middleware('role:admin');
-        Route::delete('/offices/{id}', [OfficeController::class, 'destroy'])->middleware('role:admin');
-        Route::post('/offices/import', [OfficeController::class, 'import'])->middleware('role:admin');
+        Route::post('/offices', [OfficeController::class, 'store'])->middleware('role:super_admin');
+        Route::put('/offices/{id}', [OfficeController::class, 'update'])->middleware('role:super_admin');
+        Route::delete('/offices/{id}', [OfficeController::class, 'destroy'])->middleware('role:super_admin');
+        Route::post('/offices/import', [OfficeController::class, 'import'])->middleware('role:super_admin');
 
-        // Signatories (Public list, Admin management)
+        // Signatories (Public list, Super Admin management)
         Route::get('/signatories', [SignatoryController::class, 'index']);
-        Route::post('/signatories', [SignatoryController::class, 'store'])->middleware('role:admin');
-        Route::put('/signatories/{id}', [SignatoryController::class, 'update'])->middleware('role:admin');
-        Route::delete('/signatories/{id}', [SignatoryController::class, 'destroy'])->middleware('role:admin');
+        Route::post('/signatories', [SignatoryController::class, 'store'])->middleware('role:super_admin');
+        Route::put('/signatories/{id}', [SignatoryController::class, 'update'])->middleware('role:super_admin');
+        Route::delete('/signatories/{id}', [SignatoryController::class, 'destroy'])->middleware('role:super_admin');
 
         // Notifications & Utility
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::post('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
         Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+        Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
+        Route::delete('/notifications', [NotificationController::class, 'clearAll']);
         Route::get('/offices', [NotificationController::class, 'offices']);
 
         // PPMP CRUD
@@ -114,11 +117,11 @@ Route::prefix('api')->group(function () {
 
         // 8. Request Supplemental or Amendment (READY_TO_PRINT)
         Route::post('/ppmps/{uuid}/request-amendment-or-supplemental', [PpmpWorkflowController::class, 'requestAmendmentOrSupplemental'])->middleware('role:end_user');
-        Route::post('/ppmps/{uuid}/amendment/approve', [PpmpWorkflowController::class, 'approveAmendmentRequest'])->middleware('role:admin');
-        Route::post('/ppmps/{uuid}/amendment/reject', [PpmpWorkflowController::class, 'rejectAmendmentRequest'])->middleware('role:admin');
+        Route::post('/ppmps/{uuid}/amendment/approve', [PpmpWorkflowController::class, 'approveAmendmentRequest'])->middleware('role:admin,super_admin');
+        Route::post('/ppmps/{uuid}/amendment/reject', [PpmpWorkflowController::class, 'rejectAmendmentRequest'])->middleware('role:admin,super_admin');
 
-        // Activity Logs (Admin only)
-        Route::get('/activity-logs', [ActivityLogController::class, 'index'])->middleware('role:admin');
+        // Activity Logs (Admin & Super Admin)
+        Route::get('/activity-logs', [ActivityLogController::class, 'index'])->middleware('role:admin,super_admin');
     });
 });
 

@@ -68,6 +68,34 @@ class NotificationController extends Controller
     }
 
     /**
+     * Delete / Dismiss single notification
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $user = $request->user();
+
+        $notification = SystemNotification::where('user_id', $user->id)
+            ->where('id', $id)
+            ->firstOrFail();
+
+        $notification->delete();
+
+        return response()->json(['message' => 'Notification dismissed.']);
+    }
+
+    /**
+     * Clear all notifications for user
+     */
+    public function clearAll(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        SystemNotification::where('user_id', $user->id)->delete();
+
+        return response()->json(['message' => 'All notifications cleared.']);
+    }
+
+    /**
      * List all offices (for forms/filters)
      */
     public function offices(): JsonResponse

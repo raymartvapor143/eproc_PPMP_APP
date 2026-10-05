@@ -79,10 +79,10 @@ export const AdminSidebar = ({ activeSection, onSelectSection, metrics, pendingU
                         </div>
                         <div>
                             <div className="text-xs font-black uppercase tracking-wider text-blue-200">
-                                Admin Portal
+                                Super Admin Portal
                             </div>
                             <div className="text-[11px] text-slate-300 font-medium truncate">
-                                Navigation & Intelligence
+                                Executive Governance &amp; Analytics
                             </div>
                         </div>
                     </div>

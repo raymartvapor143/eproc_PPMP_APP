@@ -13,15 +13,57 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Create or update the system administrator account
+        // Create or update the Super Administrator account
         User::updateOrCreate(
             ['email' => 'admin@system16.com'],
+            [
+                'name'         => 'Super Administrator',
+                'password'     => Hash::make('++admin@2026.davsur++'),
+                'role'         => 'super_admin',
+                'designation'  => 'Super Administrator',
+                'is_active'    => true,
+                'approval_status' => 'approved',
+            ]
+        );
+
+        // Create or update the Administrator account
+        User::updateOrCreate(
+            ['email' => 'administrator@system16.com'],
             [
                 'name'         => 'System Administrator',
                 'password'     => Hash::make('++admin@2026.davsur++'),
                 'role'         => 'admin',
-                'designation'  => 'System Administrator',
+                'designation'  => 'Provincial Administrator',
                 'is_active'    => true,
+                'approval_status' => 'approved',
+            ]
+        );
+
+        // Create or update default official PPMP signatories
+        \App\Models\PpmpSignatory::firstOrCreate(
+            ['signatory_type' => 'budget_requirement'],
+            [
+                'name' => 'DESSAMIE BUAT-SANCHEZ, CPA, JD',
+                'position' => 'PGDH - PBO / BAC - Chairman',
+                'is_active' => true,
+            ]
+        );
+
+        \App\Models\PpmpSignatory::firstOrCreate(
+            ['signatory_type' => 'bac_secretariat'],
+            [
+                'name' => 'NORJANNA M. CAMAGUIN, MPA',
+                'position' => 'PGDH - OPPMO',
+                'is_active' => true,
+            ]
+        );
+
+        \App\Models\PpmpSignatory::firstOrCreate(
+            ['signatory_type' => 'approved_by'],
+            [
+                'name' => 'HON. YVONNE R. CAGAS',
+                'position' => 'Provincial Governor',
+                'is_active' => true,
             ]
         );
     }

@@ -26,8 +26,8 @@ class OfficeController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
-            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        if (!$user->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Super Admin access required.'], 403);
         }
 
         $validated = $request->validate([
@@ -60,8 +60,8 @@ class OfficeController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
-            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        if (!$user->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Super Admin access required.'], 403);
         }
 
         $office = Office::findOrFail($id);
@@ -98,8 +98,8 @@ class OfficeController extends Controller
     public function destroy(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
-            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        if (!$user->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Super Admin access required.'], 403);
         }
 
         $office = Office::withCount(['users', 'ppmps'])->findOrFail($id);
@@ -127,8 +127,8 @@ class OfficeController extends Controller
     public function import(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
-            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        if (!$user->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Super Admin access required.'], 403);
         }
 
         $request->validate([

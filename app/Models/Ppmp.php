@@ -78,6 +78,35 @@ class Ppmp extends Model
         'admin_received_at' => 'datetime',
     ];
 
+    protected $appends = ['default_signatories'];
+
+    public function getDefaultSignatoriesAttribute(): array
+    {
+        static $cachedSignatories = null;
+        if ($cachedSignatories === null) {
+            $signatories = \App\Models\PpmpSignatory::where('is_active', true)->get();
+            $budget = $signatories->firstWhere('signatory_type', 'budget_requirement');
+            $bac = $signatories->firstWhere('signatory_type', 'bac_secretariat');
+            $gov = $signatories->firstWhere('signatory_type', 'approved_by');
+
+            $cachedSignatories = [
+                'budget_requirement' => [
+                    'name' => $budget ? $budget->name : 'DESSAMIE BUAT-SANCHEZ, CPA, JD',
+                    'position' => $budget ? $budget->position : 'PGDH - PBO / BAC - Chairman',
+                ],
+                'bac_secretariat' => [
+                    'name' => $bac ? $bac->name : 'NORJANNA M. CAMAGUIN, MPA',
+                    'position' => $bac ? $bac->position : 'PGDH - OPPMO',
+                ],
+                'approved_by' => [
+                    'name' => $gov ? $gov->name : 'HON. YVONNE R. CAGAS',
+                    'position' => $gov ? $gov->position : 'Provincial Governor',
+                ],
+            ];
+        }
+        return $cachedSignatories;
+    }
+
     public function parent()
     {
         return $this->belongsTo(Ppmp::class, 'parent_id');

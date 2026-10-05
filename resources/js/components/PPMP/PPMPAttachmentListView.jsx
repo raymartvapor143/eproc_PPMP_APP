@@ -33,8 +33,8 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, onBack, onG
         (user?.role === 'twg' && ppmp?.status === 'TWG_REVIEW')
     );
 
-    const isScopeLocked = ppmp?.amendment_scope === 'PPMP_APP' && user?.role !== 'admin';
-    const allowEdit = canEdit && !isScopeLocked && (isCreatorEditable || isReviewerEditable || user?.role === 'admin');
+    const isScopeLocked = ppmp?.amendment_scope === 'PPMP_APP' && !['admin', 'super_admin'].includes(user?.role);
+    const allowEdit = canEdit && !isScopeLocked && (isCreatorEditable || isReviewerEditable || ['admin', 'super_admin'].includes(user?.role));
 
     // Mode: 'create' (form mode to edit/create) or 'view' (official print layout)
     // If user cannot edit, force view mode

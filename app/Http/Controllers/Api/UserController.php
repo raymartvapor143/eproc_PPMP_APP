@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\SystemNotification;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,6 +39,10 @@ class UserController extends Controller
         }
 
         $targetUser = User::findOrFail($id);
+
+        if ($targetUser->isSuperAdmin() && !$admin->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Only Super Administrators can manage Super Administrator accounts.'], 403);
+        }
 
         $request->validate([
             'password' => ['required', 'string', 'min:6'],
@@ -89,6 +94,14 @@ class UserController extends Controller
             $admin->id
         );
 
+        SystemNotification::notify(
+            $targetUser->id,
+            'Account Registration Approved',
+            'Congratulations! Your account registration has been reviewed and approved by the Administrator. You now have full access to the system.',
+            null,
+            'success'
+        );
+
         return response()->json([
             'message' => "Account for {$targetUser->name} has been approved and activated.",
             'user' => $targetUser->load('office'),
@@ -128,6 +141,14 @@ class UserController extends Controller
             $admin->id
         );
 
+        SystemNotification::notify(
+            $targetUser->id,
+            'Account Registration Disapproved',
+            "Your registration was disapproved by the Administrator. Reason: {$reason}",
+            null,
+            'danger'
+        );
+
         return response()->json([
             'message' => "Registration for {$targetUser->name} has been rejected.",
             'user' => $targetUser->load('office'),
@@ -145,6 +166,10 @@ class UserController extends Controller
         }
 
         $targetUser = User::findOrFail($id);
+
+        if ($targetUser->isSuperAdmin() && !$admin->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Only Super Administrators can manage Super Administrator accounts.'], 403);
+        }
 
         if ($targetUser->id === $admin->id) {
             return response()->json(['message' => 'You cannot deactivate your own account.'], 422);
@@ -180,6 +205,10 @@ class UserController extends Controller
 
         $targetUser = User::findOrFail($id);
 
+        if ($targetUser->isSuperAdmin() && !$admin->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Only Super Administrators can manage Super Administrator accounts.'], 403);
+        }
+
         if ($targetUser->id === $admin->id) {
             return response()->json(['message' => 'You cannot delete your own account.'], 422);
         }
@@ -207,6 +236,49 @@ class UserController extends Controller
     }
 
     /**
+     * Update a user's role (Admin & Super Admin)
+     */
+    public function updateRole(Request $request, int $id): JsonResponse
+    {
+        $admin = $request->user();
+        if (!$admin->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        }
+
+        $targetUser = User::findOrFail($id);
+
+        if ($targetUser->isSuperAdmin() && !$admin->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Only Super Administrators can manage Super Administrator accounts.'], 403);
+        }
+
+        $allowedRoles = ['end_user', 'head', 'budget_officer', 'oppmo', 'twg', 'authorized_staff', 'admin'];
+        if ($admin->isSuperAdmin()) {
+            $allowedRoles[] = 'super_admin';
+        }
+
+        $validated = $request->validate([
+            'role' => ['required', 'string', 'in:' . implode(',', $allowedRoles)],
+        ]);
+
+        $oldRole = $targetUser->role;
+        $targetUser->update(['role' => $validated['role']]);
+
+        AuditLog::log(
+            'USER_ROLE_CHANGED',
+            'users',
+            $targetUser->id,
+            ['role' => $oldRole],
+            ['role' => $validated['role']],
+            $admin->id
+        );
+
+        return response()->json([
+            'message' => "Role for {$targetUser->name} has been updated to {$validated['role']}.",
+            'user' => $targetUser->load('office'),
+        ]);
+    }
+
+    /**
      * Serve a user's signature file securely for authorized users
      */
     public function getSignature(Request $request, int $id): \Symfony\Component\HttpFoundation\BinaryFileResponse|JsonResponse
@@ -217,7 +289,7 @@ class UserController extends Controller
         // Access Control: Allow self, admin, or official procurement signatories/reviewers
         $isSelf = $currentUser->id === $targetUser->id;
         $isAdmin = $currentUser->isAdmin();
-        $isOfficialSignatory = in_array($targetUser->role, ['head', 'budget_officer', 'oppmo', 'twg', 'admin', 'authorized_staff'], true);
+        $isOfficialSignatory = in_array($targetUser->role, ['head', 'budget_officer', 'oppmo', 'twg', 'admin', 'super_admin', 'authorized_staff'], true);
 
         if (!$isSelf && !$isAdmin && !$isOfficialSignatory) {
             // If target user is a regular end user, check if they prepared a PPMP that the current user has rights to view

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\SystemNotification;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -182,6 +183,18 @@ class AuthController extends Controller
             ['email' => $user->email, 'name' => $user->name, 'office_id' => $user->office_id, 'role' => $user->role, 'is_active' => false],
             $user->id
         );
+
+        // Notify Admins & Super Admins of pending user registration
+        $admins = User::whereIn('role', ['admin', 'super_admin'])->where('is_active', true)->get();
+        foreach ($admins as $admin) {
+            SystemNotification::notify(
+                $admin->id,
+                'New User Registration',
+                "{$user->name} ({$user->designation}) registered and is awaiting approval.",
+                null,
+                'info'
+            );
+        }
 
         return response()->json([
             'message' => 'Your account is pending approval. Your account will remain pending until you submit a User Access Form to the Office of the Provincial Procurement Management Officer for approval.',

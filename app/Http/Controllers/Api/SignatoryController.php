@@ -25,8 +25,8 @@ class SignatoryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
-            return response()->json(['message' => 'Only Administrators can configure official signatories.'], 403);
+        if (!$user->isSuperAdmin()) {
+            return response()->json(['message' => 'Only Super Administrators can configure official signatories.'], 403);
         }
 
         $validated = $request->validate([
@@ -64,8 +64,8 @@ class SignatoryController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
-            return response()->json(['message' => 'Only Administrators can configure official signatories.'], 403);
+        if (!$user->isSuperAdmin()) {
+            return response()->json(['message' => 'Only Super Administrators can configure official signatories.'], 403);
         }
 
         $signatory = PpmpSignatory::findOrFail($id);
@@ -100,8 +100,8 @@ class SignatoryController extends Controller
     public function destroy(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        if (!$user->isAdmin()) {
-            return response()->json(['message' => 'Only Administrators can remove signatories.'], 403);
+        if (!$user->isSuperAdmin()) {
+            return response()->json(['message' => 'Only Super Administrators can remove signatories.'], 403);
         }
 
         $signatory = PpmpSignatory::findOrFail($id);

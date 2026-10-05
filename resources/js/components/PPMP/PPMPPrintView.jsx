@@ -369,18 +369,18 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
                                 <div className="text-center flex flex-col items-center justify-end">
                                     <div className="relative inline-flex items-center justify-center">
                                         <div className="font-bold text-xs uppercase underline text-center">
-                                            {budgetSig?.signer_name || ppmp?.default_signatories?.budget_requirement?.name || 'Atty. Roberto G. Almendras, CPA'}
+                                            {ppmp?.default_signatories?.budget_requirement?.name || 'DESSAMIE BUAT-SANCHEZ, CPA, JD'}
                                         </div>
                                         {budgetSig?.user?.signature_path && (
                                             <img
                                                 src={`/api/users/${budgetSig.user.id}/signature`}
-                                                alt="Signature"
+                                                alt="Initial Signature"
                                                 className="h-7 max-w-[65px] object-contain absolute left-full ml-1.5 bottom-0 pointer-events-none"
                                             />
                                         )}
                                     </div>
                                     <div className="text-[9px] uppercase mt-0.5">
-                                        {budgetSig?.signer_designation || ppmp?.default_signatories?.budget_requirement?.position || 'PROVINCIAL BUDGET OFFICER'}
+                                        {ppmp?.default_signatories?.budget_requirement?.position || 'PGDH - PBO / BAC - Chairman'}
                                     </div>
                                     {budgetSig ? (
                                         <div className="text-[8px] font-mono text-slate-600">
@@ -398,18 +398,18 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
                                 <div className="text-center flex flex-col items-center justify-end">
                                     <div className="relative inline-flex items-center justify-center">
                                         <div className="font-bold text-xs uppercase underline text-center">
-                                            {oppmoSig?.signer_name || ppmp?.default_signatories?.bac_secretariat?.name || 'Mr. Christopher B. Ramos'}
+                                            {ppmp?.default_signatories?.bac_secretariat?.name || 'NORJANNA M. CAMAGUIN, MPA'}
                                         </div>
                                         {oppmoSig?.user?.signature_path && (
                                             <img
                                                 src={`/api/users/${oppmoSig.user.id}/signature`}
-                                                alt="Signature"
+                                                alt="Initial Signature"
                                                 className="h-7 max-w-[65px] object-contain absolute left-full ml-1.5 bottom-0 pointer-events-none"
                                             />
                                         )}
                                     </div>
                                     <div className="text-[9px] uppercase font-bold mt-0.5">
-                                        {oppmoSig?.signer_designation || ppmp?.default_signatories?.bac_secretariat?.position || 'HEAD OF BAC SECRETARIAT / OPPMO'}
+                                        {ppmp?.default_signatories?.bac_secretariat?.position || 'PGDH - OPPMO'}
                                     </div>
                                     {oppmoSig ? (
                                         <div className="text-[8px] font-mono text-slate-600">

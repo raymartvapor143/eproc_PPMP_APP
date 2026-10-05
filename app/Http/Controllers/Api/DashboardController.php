@@ -99,8 +99,8 @@ class DashboardController extends Controller
                 ->take(100)
                 ->get();
 
-        } else {
-            // Admin
+        } elseif ($user->isSuperAdmin()) {
+            // Super Admin: Full Executive Overview & Analytics
             $base = Ppmp::whereDoesntHave('children');
 
             $metrics = [
@@ -164,6 +164,32 @@ class DashboardController extends Controller
                 'procurement_modes' => $procurementModes,
                 'status_distribution' => $statusDistribution,
             ];
+        } else {
+            // Admin role: Specialized management for Users, Amended/Supplemental, System Logs, PPMP List
+            $base = Ppmp::whereDoesntHave('children');
+
+            $metrics = [
+                'total_ppmps' => (clone $base)->count(),
+                'total_budget' => (float) ((clone $base)->sum('total_budget') ?? 0),
+                'draft' => (clone $base)->where('status', 'DRAFT')->count(),
+                'head_pending' => (clone $base)->where('status', 'HEAD_PENDING')->count(),
+                'in_review' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'OPPMO_REVIEW', 'TWG_REVIEW'])->count(),
+                'ready_to_print' => (clone $base)->where('status', 'READY_TO_PRINT')->count(),
+                'pending_amendments' => Ppmp::where('amendment_status', 'PENDING_APPROVAL')->count(),
+                'total_amendments' => Ppmp::whereNotNull('amendment_status')->count(),
+                'total_users' => User::count(),
+                'pending_users' => User::where('is_active', false)->where('approval_status', '!=', 'rejected')->count(),
+                'active_users' => User::where('is_active', true)->where('approval_status', '!=', 'rejected')->count(),
+                'rejected_users' => User::where('approval_status', 'rejected')->count(),
+                'total_logs' => AuditLog::count(),
+            ];
+
+            $recentPpmps = (clone $base)->with(['office', 'creator', 'signatures'])->latest('updated_at')->take(100)->get();
+
+            $pendingAmendments = Ppmp::with(['office', 'creator', 'attachments'])
+                ->where('amendment_status', 'PENDING_APPROVAL')
+                ->latest('updated_at')
+                ->get();
         }
 
         // Recent Routing Actions
@@ -172,15 +198,16 @@ class DashboardController extends Controller
             ->take(8)
             ->get();
 
-        $signatories = $user->isAdmin() ? PpmpSignatory::latest('id')->get() : [];
-        $users = $user->isAdmin() ? User::with('office')->orderBy('name')->get() : [];
-        $offices = $user->isAdmin() ? Office::with('head')->orderBy('name')->get() : [];
+        $signatories = $user->isSuperAdmin() ? PpmpSignatory::latest('id')->get() : [];
+        $users = ($user->isSuperAdmin() || $user->isAdminRole()) ? User::with('office')->orderBy('name')->get() : [];
+        $offices = ($user->isSuperAdmin() || $user->isAdminRole()) ? Office::with('head')->orderBy('name')->get() : [];
 
         return response()->json([
             'role' => $user->role,
             'metrics' => $metrics,
             'recent_ppmps' => $recentPpmps,
             'recent_routes' => $recentRoutes,
+            'pending_amendments' => $pendingAmendments ?? [],
             'signatories' => $signatories,
             'users' => $users,
             'offices' => $offices,

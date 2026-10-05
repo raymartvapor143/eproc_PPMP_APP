@@ -214,7 +214,7 @@ export const PPMPDetailPage = ({
         'BUDGET_OFFICER_RETURNED',
         'OPPMO_RETURNED',
         'TWG_RETURNED'
-    ].includes(ppmp.status)) || isReviewerEditable || user.role === 'admin';
+    ].includes(ppmp.status)) || isReviewerEditable || ['admin', 'super_admin'].includes(user.role);
 
     if (isPrintView) {
         return <PPMPPrintView ppmp={ppmp} onBack={() => setIsPrintView(false)} />;
@@ -285,7 +285,7 @@ export const PPMPDetailPage = ({
         'BUDGET_OFFICER_RETURNED',
         'OPPMO_RETURNED',
         'TWG_RETURNED'
-    ].includes(ppmp.status)) || user.role === 'admin';
+    ].includes(ppmp.status)) || ['admin', 'super_admin'].includes(user.role);
 
     const handleSubmitToHead = async () => {
         if (!window.confirm('Submit this PPMP to your Office Head for official endorsement and approval?')) return;
@@ -541,7 +541,7 @@ export const PPMPDetailPage = ({
                     )}
 
                     {canEdit && (
-                        ppmp.amendment_scope === 'ATTACHMENT_LIST' && user.role !== 'admin' ? (
+                        ppmp.amendment_scope === 'ATTACHMENT_LIST' && !['admin', 'super_admin'].includes(user.role) ? (
                             <button
                                 type="button"
                                 onClick={() => setIsAttachmentListView(true)}
@@ -680,7 +680,7 @@ export const PPMPDetailPage = ({
                             </div>
                         </div>
 
-                        {user.role === 'admin' && (
+                        {['admin', 'super_admin'].includes(user.role) && (
                             <div className="flex items-center gap-2 self-start sm:self-center shrink-0 flex-wrap">
                                 {!ppmp.admin_received_at && (
                                     <button

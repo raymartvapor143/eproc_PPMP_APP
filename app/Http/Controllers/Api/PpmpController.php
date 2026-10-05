@@ -58,6 +58,10 @@ class PpmpController extends Controller
             $query->where('status', $request->input('status'));
         }
 
+        if ($request->filled('amendment_status')) {
+            $query->where('amendment_status', $request->input('amendment_status'));
+        }
+
         if ($request->filled('fiscal_year')) {
             $query->where('fiscal_year', $request->input('fiscal_year'));
         }

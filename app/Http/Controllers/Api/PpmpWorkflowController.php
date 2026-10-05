@@ -61,11 +61,13 @@ class PpmpWorkflowController extends Controller
                 'submitted_at' => now(),
             ]);
 
+            $idLabel = $this->getPpmpIdentifier($ppmp);
+
             if ($targetHeadId) {
                 SystemNotification::notify(
                     $targetHeadId,
                     'PPMP Submitted for Endorsement',
-                    "PPMP No. {$ppmp->ppmp_number} ({$ppmp->title}) was submitted by {$user->name} for review.",
+                    "PPMP {$idLabel} ({$ppmp->title}) was submitted by {$user->name} for review.",
                     $ppmp->id,
                     'info'
                 );
@@ -82,7 +84,7 @@ class PpmpWorkflowController extends Controller
                 SystemNotification::notify(
                     $staffId,
                     'PPMP Submitted for Endorsement (Acting Head)',
-                    "PPMP No. {$ppmp->ppmp_number} ({$ppmp->title}) was submitted by {$user->name} for endorsement on behalf of the Office Head.",
+                    "PPMP {$idLabel} ({$ppmp->title}) was submitted by {$user->name} for endorsement on behalf of the Office Head.",
                     $ppmp->id,
                     'info'
                 );
@@ -176,10 +178,12 @@ class PpmpWorkflowController extends Controller
                 'acted_at' => $now,
             ]);
 
+            $idLabel = $this->getPpmpIdentifier($ppmp);
+
             SystemNotification::notify(
                 $ppmp->created_by,
                 'PPMP Approved by Office Head',
-                "PPMP No. {$ppmp->ppmp_number} has been approved and endorsed by Office Head {$user->name}. You may now submit it for formal review.",
+                "PPMP {$idLabel} has been approved and endorsed by Office Head {$user->name}. You may now submit it for formal review.",
                 $ppmp->id,
                 'success'
             );
@@ -263,10 +267,12 @@ class PpmpWorkflowController extends Controller
                 'acted_at' => $now,
             ]);
 
+            $idLabel = $this->getPpmpIdentifier($ppmp);
+
             SystemNotification::notify(
                 $ppmp->created_by,
                 'PPMP Returned by Office Head',
-                "PPMP No. {$ppmp->ppmp_number} was returned with comments: " . Str::limit($validated['remarks'], 100),
+                "PPMP {$idLabel} was returned with comments: " . Str::limit($validated['remarks'], 100),
                 $ppmp->id,
                 'warning'
             );
@@ -348,12 +354,12 @@ class PpmpWorkflowController extends Controller
 
             $ppmp->update($updateData);
 
-            $reviewerUser = User::where('role', $nextRole)->where('is_active', true)->first();
+            $targetReviewers = User::where('role', $nextRole)->where('is_active', true)->get();
 
             PpmpRoute::create([
                 'ppmp_id' => $ppmp->id,
                 'from_user_id' => $user->id,
-                'to_user_id' => $reviewerUser?->id,
+                'to_user_id' => $targetReviewers->first()?->id,
                 'from_role' => 'end_user',
                 'to_role' => $nextRole,
                 'action' => 'SUBMITTED_FOR_REVIEW',
@@ -362,11 +368,12 @@ class PpmpWorkflowController extends Controller
                 'submitted_at' => $now,
             ]);
 
-            if ($reviewerUser) {
+            $idLabel = $this->getPpmpIdentifier($ppmp);
+            foreach ($targetReviewers as $rev) {
                 SystemNotification::notify(
-                    $reviewerUser->id,
+                    $rev->id,
                     'PPMP Submitted for Review',
-                    "PPMP No. {$ppmp->ppmp_number} ({$ppmp->title}) is ready for your review.",
+                    "PPMP {$idLabel} ({$ppmp->title}) is ready for your review.",
                     $ppmp->id,
                     'info'
                 );
@@ -439,12 +446,12 @@ class PpmpWorkflowController extends Controller
                 'user_agent' => request()->userAgent(),
             ]);
 
-            $oppmoUser = User::where('role', 'oppmo')->where('is_active', true)->first();
+            $oppmoUsers = User::where('role', 'oppmo')->where('is_active', true)->get();
 
             PpmpRoute::create([
                 'ppmp_id' => $ppmp->id,
                 'from_user_id' => $user->id,
-                'to_user_id' => $oppmoUser?->id,
+                'to_user_id' => $oppmoUsers->first()?->id,
                 'from_role' => 'budget_officer',
                 'to_role' => 'oppmo',
                 'action' => 'BUDGET_APPROVED',
@@ -454,11 +461,12 @@ class PpmpWorkflowController extends Controller
                 'acted_at' => $now,
             ]);
 
-            if ($oppmoUser) {
+            $idLabel = $this->getPpmpIdentifier($ppmp);
+            foreach ($oppmoUsers as $oppmo) {
                 SystemNotification::notify(
-                    $oppmoUser->id,
+                    $oppmo->id,
                     'PPMP Awaiting OPPMO Review',
-                    "PPMP No. {$ppmp->ppmp_number} was certified by Budget Office and routed to OPPMO.",
+                    "PPMP {$idLabel} was certified by Budget Office and routed to OPPMO.",
                     $ppmp->id,
                     'info'
                 );
@@ -537,10 +545,12 @@ class PpmpWorkflowController extends Controller
                 'acted_at' => $now,
             ]);
 
+            $idLabel = $this->getPpmpIdentifier($ppmp);
+
             SystemNotification::notify(
                 $ppmp->created_by,
                 'PPMP Returned by Budget Officer',
-                "PPMP No. {$ppmp->ppmp_number} returned: " . Str::limit($validated['remarks'], 100),
+                "PPMP {$idLabel} returned: " . Str::limit($validated['remarks'], 100),
                 $ppmp->id,
                 'warning'
             );
@@ -640,22 +650,24 @@ class PpmpWorkflowController extends Controller
                     'acted_at' => $now,
                 ]);
 
+                $idLabel = $this->getPpmpIdentifier($ppmp);
+
                 SystemNotification::notify(
                     $ppmp->created_by,
                     'PPMP Approved & Ready to Print',
-                    "PPMP No. {$ppmp->ppmp_number} ({$ppmp->title}) has received full OPPMO approval and is now READY TO PRINT.",
+                    "PPMP {$idLabel} ({$ppmp->title}) has received full OPPMO approval and is now READY TO PRINT.",
                     $ppmp->id,
                     'success'
                 );
 
                 AuditLog::log('PPMP_OPPMO_APPROVED_FINAL', 'ppmps', $ppmp->id, null, ['status' => 'READY_TO_PRINT'], $user->id);
             } else {
-                $twgUser = User::where('role', 'twg')->where('is_active', true)->first();
+                $twgUsers = User::where('role', 'twg')->where('is_active', true)->get();
 
                 PpmpRoute::create([
                     'ppmp_id' => $ppmp->id,
                     'from_user_id' => $user->id,
-                    'to_user_id' => $twgUser?->id,
+                    'to_user_id' => $twgUsers->first()?->id,
                     'from_role' => 'oppmo',
                     'to_role' => 'twg',
                     'action' => 'OPPMO_APPROVED',
@@ -665,11 +677,12 @@ class PpmpWorkflowController extends Controller
                     'acted_at' => $now,
                 ]);
 
-                if ($twgUser) {
+                $idLabel = $this->getPpmpIdentifier($ppmp);
+                foreach ($twgUsers as $twg) {
                     SystemNotification::notify(
-                        $twgUser->id,
+                        $twg->id,
                         'PPMP Awaiting TWG Review',
-                        "PPMP No. {$ppmp->ppmp_number} was approved by OPPMO and is now awaiting BAC-TWG review.",
+                        "PPMP {$idLabel} was approved by OPPMO and is now awaiting BAC-TWG review.",
                         $ppmp->id,
                         'info'
                     );
@@ -753,10 +766,12 @@ class PpmpWorkflowController extends Controller
                 'acted_at' => $now,
             ]);
 
+            $idLabel = $this->getPpmpIdentifier($ppmp);
+
             SystemNotification::notify(
                 $ppmp->created_by,
                 'PPMP Returned by OPPMO',
-                "PPMP No. {$ppmp->ppmp_number} returned: " . Str::limit($validated['remarks'], 100),
+                "PPMP {$idLabel} returned: " . Str::limit($validated['remarks'], 100),
                 $ppmp->id,
                 'warning'
             );
@@ -842,10 +857,12 @@ class PpmpWorkflowController extends Controller
                 'acted_at' => $now,
             ]);
 
+            $idLabel = $this->getPpmpIdentifier($ppmp);
+
             SystemNotification::notify(
                 $ppmp->created_by,
                 'PPMP Approved & Ready to Print',
-                "Congratulations! PPMP No. {$ppmp->ppmp_number} ({$ppmp->title}) has received full BAC-TWG technical approval and is now READY TO PRINT.",
+                "Congratulations! PPMP {$idLabel} ({$ppmp->title}) has received full BAC-TWG technical approval and is now READY TO PRINT.",
                 $ppmp->id,
                 'success'
             );
@@ -923,10 +940,12 @@ class PpmpWorkflowController extends Controller
                 'acted_at' => $now,
             ]);
 
+            $idLabel = $this->getPpmpIdentifier($ppmp);
+
             SystemNotification::notify(
                 $ppmp->created_by,
                 'PPMP Returned by BAC-TWG',
-                "PPMP No. {$ppmp->ppmp_number} returned: " . Str::limit($validated['remarks'], 100),
+                "PPMP {$idLabel} returned: " . Str::limit($validated['remarks'], 100),
                 $ppmp->id,
                 'warning'
             );
@@ -1193,13 +1212,14 @@ class PpmpWorkflowController extends Controller
                 'submitted_at' => $now,
             ]);
 
-            // Notify Admins
-            $admins = User::where('role', 'admin')->where('is_active', true)->get();
+            // Notify Admins & Super Admins
+            $admins = User::whereIn('role', ['admin', 'super_admin'])->where('is_active', true)->get();
+            $idLabel = $this->getPpmpIdentifier($ppmp);
             foreach ($admins as $admin) {
                 SystemNotification::notify(
                     $admin->id,
                     "New {$typeLabel} Request",
-                    "Office '{$ppmp->office?->name}' requested a {$typeLabel} ({$scopeLabel}) for PPMP No. {$ppmp->ppmp_number}.",
+                    "Office '{$ppmp->office?->name}' requested a {$typeLabel} ({$scopeLabel}) for PPMP {$idLabel}.",
                     $ppmp->id,
                     'info'
                 );
@@ -1379,10 +1399,11 @@ class PpmpWorkflowController extends Controller
             ]);
 
             // Notify Creator
+            $idLabel = $this->getPpmpIdentifier($ppmp);
             SystemNotification::notify(
                 $ppmp->created_by,
                 "{$type} Request Approved",
-                "Your {$type} request ({$scopeLabel}) for PPMP No. {$ppmp->ppmp_number} was approved! A revision has been reopened in DRAFT for you to edit.",
+                "Your {$type} request ({$scopeLabel}) for PPMP {$idLabel} was approved! A revision has been reopened in DRAFT for you to edit.",
                 $childPpmp->id,
                 'success'
             );
@@ -1445,10 +1466,11 @@ class PpmpWorkflowController extends Controller
                 'acted_at' => $now,
             ]);
 
+            $idLabel = $this->getPpmpIdentifier($ppmp);
             SystemNotification::notify(
                 $ppmp->created_by,
                 "{$type} Request Disapproved",
-                "Your {$type} request for PPMP No. {$ppmp->ppmp_number} was disapproved by Administrator: {$validated['remarks']}",
+                "Your {$type} request for PPMP {$idLabel} was disapproved by Administrator: {$validated['remarks']}",
                 $ppmp->id,
                 'warning'
             );
@@ -1503,5 +1525,13 @@ class PpmpWorkflowController extends Controller
                 'action' => 'field_correction',
             ]);
         }
+    }
+
+    /**
+     * Get user-friendly PPMP identifier (Tracking number preferred over raw 0)
+     */
+    private function getPpmpIdentifier(Ppmp $ppmp): string
+    {
+        return $ppmp->tracking_number ?: "PPMP No. {$ppmp->ppmp_number}";
     }
 }
