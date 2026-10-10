@@ -33,11 +33,34 @@ import {
     BadgeAlert,
     Inbox,
     GitBranch,
+    Landmark,
+    Truck,
+    Leaf,
 } from 'lucide-react';
+import { FundSourcesManagement } from '../../components/Dashboard/FundSourcesManagement';
+import { ProcurementConditionsManagement } from '../../components/Dashboard/ProcurementConditionsManagement';
+import { OtherTermsManagement } from '../../components/Dashboard/OtherTermsManagement';
 
 export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) => {
-    // Current Active Tab: 'users' | 'amendments' | 'logs' | 'ppmps'
+    // Current Active Tab: 'users' | 'amendments' | 'logs' | 'ppmps' | 'fund_sources' | 'conditions' | 'other_terms'
     const [activeTab, setActiveTab] = useState('users');
+
+    useEffect(() => {
+        const handleAdminNav = (e) => {
+            if (e.detail?.section) {
+                setActiveTab(e.detail.section);
+            }
+        };
+        const handleDataReload = () => {
+            if (onReload) onReload();
+        };
+        window.addEventListener('admin:navigate_section', handleAdminNav);
+        window.addEventListener('app:data_reload', handleDataReload);
+        return () => {
+            window.removeEventListener('admin:navigate_section', handleAdminNav);
+            window.removeEventListener('app:data_reload', handleDataReload);
+        };
+    }, [onReload]);
 
     // ──────────────────────────────────────────────────────────────────────────
     // USERS MANAGEMENT STATE
@@ -313,6 +336,7 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
             setAmendmentFeedback({ type: 'success', text: 'Amendment request officially marked as received.' });
             fetchAmendments();
             if (onReload) onReload();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (e) {
             setAmendmentFeedback({ type: 'error', text: e.response?.data?.message || 'Failed to receive amendment request.' });
         } finally {
@@ -328,6 +352,7 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
             setAmendmentFeedback({ type: 'success', text: res.data.message || 'Amendment request approved successfully.' });
             fetchAmendments();
             if (onReload) onReload();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (e) {
             setAmendmentFeedback({ type: 'error', text: e.response?.data?.message || 'Failed to approve amendment.' });
         } finally {
@@ -350,6 +375,7 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
             setRejectAmendmentRemarks('');
             fetchAmendments();
             if (onReload) onReload();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (e) {
             setAmendmentFeedback({ type: 'error', text: e.response?.data?.message || 'Failed to disapprove amendment.' });
         } finally {
@@ -424,6 +450,8 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                 return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-sky-100 text-sky-800">Office Head</span>;
             case 'authorized_staff':
                 return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-teal-100 text-teal-800 border border-teal-300">Authorize Staff</span>;
+            case 'pacco':
+                return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-800 border border-emerald-300">PACCO Reviewer</span>;
             default:
                 return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-700">End User</span>;
         }
@@ -630,6 +658,45 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                 >
                     <FileSpreadsheet className="w-4 h-4" />
                     <span>PPMP Master List</span>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('fund_sources')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition shrink-0 cursor-pointer ${
+                        activeTab === 'fund_sources'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                >
+                    <Landmark className="w-4 h-4" />
+                    <span>Sources of Fund</span>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('conditions')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition shrink-0 cursor-pointer ${
+                        activeTab === 'conditions'
+                            ? 'bg-blue-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                >
+                    <Truck className="w-4 h-4" />
+                    <span>Delivery Conditions</span>
+                </button>
+
+                <button
+                    type="button"
+                    onClick={() => setActiveTab('other_terms')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold transition shrink-0 cursor-pointer ${
+                        activeTab === 'other_terms'
+                            ? 'bg-emerald-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                >
+                    <Leaf className="w-4 h-4" />
+                    <span>Other Terms &amp; Green Specs</span>
                 </button>
             </div>
 
@@ -1158,7 +1225,7 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                                                                     <Inbox className="w-3 h-3" /> Receive
                                                                 </button>
                                                             )}
-                                                            {isPending && (
+                                                            {isPending && isReceived && (
                                                                 <>
                                                                     <button
                                                                         type="button"
@@ -1179,14 +1246,16 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                                                                     </button>
                                                                 </>
                                                             )}
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => onSelectPpmp && onSelectPpmp(ppmp.uuid)}
-                                                                className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold transition cursor-pointer"
-                                                                title="View full PPMP details"
-                                                            >
-                                                                <Eye className="w-3 h-3" /> View
-                                                            </button>
+                                                            {(!isPending || isReceived) && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => onSelectPpmp && onSelectPpmp(ppmp.uuid)}
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold transition cursor-pointer"
+                                                                    title="View full PPMP details"
+                                                                >
+                                                                    <Eye className="w-3 h-3" /> View
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -1396,6 +1465,27 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
             )}
 
             {/* ══════════════════════════════════════════════════════════════════ */}
+            {/* TAB 5: SOURCES OF FUND & REVIEW ROUTING                           */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {activeTab === 'fund_sources' && (
+                <FundSourcesManagement />
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {/* TAB 6: PROCUREMENT CONDITIONS & DELIVERY TERMS                    */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {activeTab === 'conditions' && (
+                <ProcurementConditionsManagement />
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {/* TAB 7: OTHER TERMS & GREEN SPECIFICATIONS                        */}
+            {/* ══════════════════════════════════════════════════════════════════ */}
+            {activeTab === 'other_terms' && (
+                <OtherTermsManagement />
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════════ */}
             {/* MODALS                                                           */}
             {/* ══════════════════════════════════════════════════════════════════ */}
 
@@ -1427,7 +1517,7 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                                 <input
                                     type="password"
                                     required
-                                    value={newPassword}
+                                    value={newPassword || ''}
                                     onChange={(e) => setNewPassword(e.target.value)}
                                     placeholder="Enter new password (min. 6 characters)"
                                     className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500"
@@ -1438,7 +1528,7 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                                 <input
                                     type="password"
                                     required
-                                    value={confirmPassword}
+                                    value={confirmPassword || ''}
                                     onChange={(e) => setConfirmPassword(e.target.value)}
                                     placeholder="Confirm new password"
                                     className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:outline-hidden focus:ring-2 focus:ring-blue-500"
@@ -1491,7 +1581,7 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                                 <textarea
                                     required
                                     rows={3}
-                                    value={rejectionReason}
+                                    value={rejectionReason || ''}
                                     onChange={(e) => setRejectionReason(e.target.value)}
                                     placeholder="Specify reason (e.g. Incomplete access form, Incorrect office assigned, Invalid authorization letter)"
                                     className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:outline-hidden focus:ring-2 focus:ring-rose-500"
@@ -1554,6 +1644,7 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                                     <option value="budget_officer">Provincial Budget Officer</option>
                                     <option value="oppmo">OPPMO / BAC Secretariat</option>
                                     <option value="twg">BAC-TWG Evaluator</option>
+                                    <option value="pacco">PACCO Reviewer (Provincial Accounting)</option>
                                     <option value="admin">Administrator</option>
                                     {user?.role === 'super_admin' && (
                                         <option value="super_admin">Super Administrator</option>
@@ -1656,7 +1747,7 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                                 <textarea
                                     required
                                     rows={3}
-                                    value={rejectAmendmentRemarks}
+                                    value={rejectAmendmentRemarks || ''}
                                     onChange={(e) => setRejectAmendmentRemarks(e.target.value)}
                                     placeholder="Provide detailed reason why this request is disapproved so the end-user can rectify..."
                                     className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:outline-hidden focus:ring-2 focus:ring-rose-500"

@@ -86,6 +86,16 @@ class User extends Authenticatable
         return $this->role === 'twg';
     }
 
+    public function isPacco(): bool
+    {
+        return $this->role === 'pacco';
+    }
+
+    public function isReviewer(): bool
+    {
+        return in_array($this->role, ['budget_officer', 'oppmo', 'twg', 'pacco'], true);
+    }
+
     public function isAdmin(): bool
     {
         return in_array($this->role, ['admin', 'super_admin'], true);

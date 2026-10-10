@@ -33,6 +33,10 @@ export const isAwaitingReceive = (ppmp, user) => {
         return role === 'budget_officer' && !ppmp.budget_received_at;
     }
 
+    if (status === 'PACCO_REVIEW') {
+        return role === 'pacco' && !ppmp.pacco_received_at;
+    }
+
     if (status === 'OPPMO_REVIEW') {
         return role === 'oppmo' && !ppmp.oppmo_received_at;
     }
@@ -46,6 +50,7 @@ export const isAwaitingReceive = (ppmp, user) => {
         'READY_TO_PRINT',
         'HEAD_RETURNED',
         'BUDGET_OFFICER_RETURNED',
+        'PACCO_RETURNED',
         'OPPMO_RETURNED',
         'TWG_RETURNED'
     ].includes(status)) {
@@ -58,7 +63,7 @@ export const isAwaitingReceive = (ppmp, user) => {
 
 /**
  * Returns metadata about the current stage's receipt state:
- * - recipientRole: string (e.g. 'Administrator', 'Office Head', 'Budget Officer', 'OPPMO', 'TWG', 'End User')
+ * - recipientRole: string (e.g. 'Administrator', 'Office Head', 'Budget Officer', 'PACCO Reviewer', 'OPPMO', 'TWG', 'End User')
  * - isReceived: boolean (true if received for current stage)
  * - receivedAt: string | null (timestamp when received)
  * - canCurrentUserReceive: boolean (true if logged in user or admin can click Receive)
@@ -90,6 +95,11 @@ export const getStageReceiptInfo = (ppmp, user) => {
         isReceived = Boolean(ppmp.budget_received_at);
         receivedAt = ppmp.budget_received_at;
         canCurrentUserReceive = (role === 'budget_officer' || ['admin', 'super_admin'].includes(role)) && !isReceived;
+    } else if (status === 'PACCO_REVIEW') {
+        recipientRole = 'PACCO Reviewer';
+        isReceived = Boolean(ppmp.pacco_received_at);
+        receivedAt = ppmp.pacco_received_at;
+        canCurrentUserReceive = (role === 'pacco' || ['admin', 'super_admin'].includes(role)) && !isReceived;
     } else if (status === 'OPPMO_REVIEW') {
         recipientRole = 'OPPMO';
         isReceived = Boolean(ppmp.oppmo_received_at);
@@ -105,6 +115,7 @@ export const getStageReceiptInfo = (ppmp, user) => {
         'READY_TO_PRINT',
         'HEAD_RETURNED',
         'BUDGET_OFFICER_RETURNED',
+        'PACCO_RETURNED',
         'OPPMO_RETURNED',
         'TWG_RETURNED'
     ].includes(status)) {

@@ -262,13 +262,13 @@ class PpmpAttachmentController extends Controller
 
         // Request letters are accessible to any reviewer or admin evaluating the request
         if ($attachment && $attachment->attachment_type === 'REQUEST_LETTER') {
-            if ($user->isAdmin() || $user->isBudgetOfficer() || $user->isOppmo() || $user->isTwg() || $user->id === $ppmp->created_by) {
+            if ($user->isAdmin() || $user->isBudgetOfficer() || $user->isOppmo() || $user->isTwg() || $user->isPacco() || $user->id === $ppmp->created_by) {
                 return;
             }
         }
 
-        // Reviewers (Budget, OPPMO, TWG) have access once it enters review workflow or when checking ready to print
-        if ($user->isBudgetOfficer() || $user->isOppmo() || $user->isTwg()) {
+        // Reviewers (Budget, OPPMO, TWG, PACCO) have access once it enters review workflow or when checking ready to print
+        if ($user->isBudgetOfficer() || $user->isOppmo() || $user->isTwg() || $user->isPacco()) {
             if (!in_array($ppmp->status, ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'])) {
                 return;
             }

@@ -38,11 +38,14 @@ class PpmpController extends Controller
             // Budget officer sees PPMPs that reached review or beyond
             $query->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED']);
         } elseif ($user->isOppmo()) {
-            // OPPMO sees PPMPs past budget review or historical
-            $query->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED']);
+            // OPPMO sees PPMPs past budget/pacco review or historical
+            $query->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED', 'PACCO_REVIEW', 'PACCO_RETURNED']);
         } elseif ($user->isTwg()) {
             // TWG sees PPMPs reaching TWG review or ready to print
-            $query->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED', 'OPPMO_REVIEW', 'OPPMO_RETURNED']);
+            $query->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED', 'PACCO_REVIEW', 'PACCO_RETURNED', 'OPPMO_REVIEW', 'OPPMO_RETURNED']);
+        } elseif ($user->isPacco()) {
+            // PACCO reviewer sees PPMPs that reached review or beyond
+            $query->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED']);
         }
 
         // Filters
@@ -90,15 +93,17 @@ class PpmpController extends Controller
         $validated = $request->validate([
             'ppmp_number' => 'nullable|string|max:50',
             'title' => 'required|string|max:500',
+            'source_of_fund' => 'nullable|string|max:255',
             'account_code' => 'nullable|string',
             'fiscal_year' => 'required|string|max:10',
             'plan_type' => 'required|in:INDICATIVE,FINAL',
             'office_id' => 'nullable|exists:offices,id',
             'implementing_unit' => 'nullable|string|max:255',
-            'delivery_period' => 'nullable|string|max:255',
-            'place_of_delivery' => 'nullable|string|max:255',
-            'payment_method' => 'nullable|string|max:255',
-            'warranty_and_other_terms' => 'nullable|string|max:1000',
+            'delivery_period' => 'nullable|string',
+            'place_of_delivery' => 'nullable|string',
+            'payment_method' => 'nullable|string',
+            'additional_condition' => 'nullable|string|max:255',
+            'warranty_and_other_terms' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.description' => 'required|string',
             'items.*.project_type' => 'nullable|string',
@@ -163,6 +168,8 @@ class PpmpController extends Controller
                 ? (string) $validated['ppmp_number']
                 : (string) ($latestCount + 1);
 
+            $sourceOfFund = $validated['source_of_fund'] ?? 'General Fund';
+
             $ppmp = Ppmp::create([
                 'uuid' => (string) Str::uuid(),
                 'tracking_number' => $trackingNumber,
@@ -171,13 +178,15 @@ class PpmpController extends Controller
                 'implementing_unit' => $validated['implementing_unit'] ?? null,
                 'created_by' => $user->id,
                 'title' => $validated['title'],
+                'source_of_fund' => $sourceOfFund,
                 'account_code' => $validated['account_code'] ?? null,
                 'fiscal_year' => $validated['fiscal_year'],
                 'plan_type' => $validated['plan_type'],
                 'is_annual' => true,
-                'delivery_period' => $validated['delivery_period'] ?? 'As scheduled',
-                'place_of_delivery' => $validated['place_of_delivery'] ?? 'Capitol Complex, Digos City',
-                'payment_method' => $validated['payment_method'] ?? 'LDDAP-ADA / Government Check',
+                'delivery_period' => ($validated['additional_condition'] ?? null) === 'POL Condition' ? null : ($validated['delivery_period'] ?? null),
+                'place_of_delivery' => ($validated['additional_condition'] ?? null) === 'POL Condition' ? null : ($validated['place_of_delivery'] ?? null),
+                'payment_method' => ($validated['additional_condition'] ?? null) === 'POL Condition' ? null : ($validated['payment_method'] ?? null),
+                'additional_condition' => $validated['additional_condition'] ?? null,
                 'warranty_and_other_terms' => $validated['warranty_and_other_terms'] ?? null,
                 'total_budget' => 0.00,
                 'status' => 'DRAFT',
@@ -196,11 +205,11 @@ class PpmpController extends Controller
                     'project_type' => $itemData['project_type'] ?? 'Goods',
                     'quantity_size' => $itemData['quantity_size'] ?? '',
                     'procurement_mode' => $itemData['procurement_mode'] ?? 'Public Bidding',
-                    'pre_proc_conference' => (bool) ($itemData['pre_proc_conference'] ?? false),
+                    'pre_proc_conference' => $itemBudget >= 5000000 ? true : (bool) ($itemData['pre_proc_conference'] ?? false),
                     'start_date' => $itemData['start_date'] ?? null,
                     'end_date' => $itemData['end_date'] ?? null,
                     'delivery_period' => $itemData['delivery_period'] ?? null,
-                    'source_of_fund' => $itemData['source_of_fund'] ?? 'General Fund',
+                    'source_of_fund' => $itemData['source_of_fund'] ?? $sourceOfFund,
                     'estimated_budget' => $itemBudget,
                     'supporting_docs_text' => $itemData['supporting_docs_text'] ?? null,
                     'remarks' => $itemData['remarks'] ?? null,
@@ -222,12 +231,13 @@ class PpmpController extends Controller
             ]);
 
             // Initial route record
+            $office = $user->office_id ? \App\Models\Office::find($user->office_id) : null;
             PpmpRoute::create([
                 'ppmp_id' => $ppmp->id,
                 'from_user_id' => $user->id,
-                'to_user_id' => $user->id,
+                'to_user_id' => $office?->head_user_id,
                 'from_role' => 'end_user',
-                'to_role' => 'end_user',
+                'to_role' => 'head',
                 'action' => 'DRAFT_CREATED',
                 'status' => 'DRAFT',
                 'remarks' => 'PPMP Draft created and initialized.',
@@ -281,11 +291,14 @@ class PpmpController extends Controller
             if ($user->isBudgetOfficer() && in_array($ppmp->status, ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'])) {
                 return response()->json(['message' => 'PPMP is not yet submitted for Budget review.'], 403);
             }
-            if ($user->isOppmo() && in_array($ppmp->status, ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED'])) {
+            if ($user->isOppmo() && in_array($ppmp->status, ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED', 'PACCO_REVIEW', 'PACCO_RETURNED'])) {
                 return response()->json(['message' => 'PPMP is not yet submitted for OPPMO review.'], 403);
             }
-            if ($user->isTwg() && in_array($ppmp->status, ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED', 'OPPMO_REVIEW', 'OPPMO_RETURNED'])) {
+            if ($user->isTwg() && in_array($ppmp->status, ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED', 'PACCO_REVIEW', 'PACCO_RETURNED', 'OPPMO_REVIEW', 'OPPMO_RETURNED'])) {
                 return response()->json(['message' => 'PPMP is not yet submitted for BAC-TWG review.'], 403);
+            }
+            if ($user->isPacco() && in_array($ppmp->status, ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'])) {
+                return response()->json(['message' => 'PPMP is not yet submitted for review.'], 403);
             }
         }
 
@@ -360,6 +373,7 @@ class PpmpController extends Controller
             'HEAD_APPROVED',
             'HEAD_RETURNED',
             'BUDGET_OFFICER_RETURNED',
+            'PACCO_RETURNED',
             'OPPMO_RETURNED',
             'TWG_RETURNED'
         ]);
@@ -367,6 +381,7 @@ class PpmpController extends Controller
         $isReviewerEditable = (
             ($user->isHead() && in_array($ppmp->status, ['HEAD_PENDING', 'HEAD_APPROVED']) && $user->office_id === $ppmp->office_id) ||
             ($user->isBudgetOfficer() && $ppmp->status === 'BUDGET_OFFICER_REVIEW') ||
+            ($user->isPacco() && $ppmp->status === 'PACCO_REVIEW') ||
             ($user->isOppmo() && $ppmp->status === 'OPPMO_REVIEW') ||
             ($user->isTwg() && $ppmp->status === 'TWG_REVIEW')
         );
@@ -387,14 +402,16 @@ class PpmpController extends Controller
         $validated = $request->validate([
             'ppmp_number' => 'nullable|string|max:50',
             'title' => 'required|string|max:500',
+            'source_of_fund' => 'nullable|string|max:255',
             'account_code' => 'nullable|string',
             'fiscal_year' => 'required|string|max:10',
             'plan_type' => 'required|in:INDICATIVE,FINAL',
             'implementing_unit' => 'nullable|string|max:255',
-            'delivery_period' => 'nullable|string|max:255',
-            'place_of_delivery' => 'nullable|string|max:255',
-            'payment_method' => 'nullable|string|max:255',
-            'warranty_and_other_terms' => 'nullable|string|max:1000',
+            'delivery_period' => 'nullable|string',
+            'place_of_delivery' => 'nullable|string',
+            'payment_method' => 'nullable|string',
+            'additional_condition' => 'nullable|string|max:255',
+            'warranty_and_other_terms' => 'nullable|string',
             'items' => 'required|array|min:1',
             'items.*.id' => 'nullable|integer',
             'items.*.description' => 'required|string',
@@ -414,16 +431,24 @@ class PpmpController extends Controller
         DB::transaction(function () use ($ppmp, $validated, $user) {
             $oldValues = $ppmp->only(['title', 'plan_type', 'total_budget']);
 
+            $sourceOfFund = $validated['source_of_fund'] ?? $ppmp->source_of_fund ?? 'General Fund';
+
+            $isPol = array_key_exists('additional_condition', $validated)
+                ? ($validated['additional_condition'] === 'POL Condition')
+                : ($ppmp->additional_condition === 'POL Condition');
+
             $ppmp->update([
                 'ppmp_number' => isset($validated['ppmp_number']) && $validated['ppmp_number'] !== '' ? $validated['ppmp_number'] : $ppmp->ppmp_number,
                 'implementing_unit' => array_key_exists('implementing_unit', $validated) ? $validated['implementing_unit'] : $ppmp->implementing_unit,
                 'title' => $validated['title'],
+                'source_of_fund' => $sourceOfFund,
                 'account_code' => $validated['account_code'] ?? $ppmp->account_code,
                 'fiscal_year' => $validated['fiscal_year'],
                 'plan_type' => $validated['plan_type'],
-                'delivery_period' => $validated['delivery_period'] ?? $ppmp->delivery_period,
-                'place_of_delivery' => $validated['place_of_delivery'] ?? $ppmp->place_of_delivery,
-                'payment_method' => $validated['payment_method'] ?? $ppmp->payment_method,
+                'delivery_period' => $isPol ? null : ($validated['delivery_period'] ?? $ppmp->delivery_period),
+                'place_of_delivery' => $isPol ? null : ($validated['place_of_delivery'] ?? $ppmp->place_of_delivery),
+                'payment_method' => $isPol ? null : ($validated['payment_method'] ?? $ppmp->payment_method),
+                'additional_condition' => array_key_exists('additional_condition', $validated) ? $validated['additional_condition'] : $ppmp->additional_condition,
                 'warranty_and_other_terms' => array_key_exists('warranty_and_other_terms', $validated) ? $validated['warranty_and_other_terms'] : $ppmp->warranty_and_other_terms,
             ]);
 
@@ -442,11 +467,11 @@ class PpmpController extends Controller
                     'project_type' => $itemData['project_type'] ?? 'Goods',
                     'quantity_size' => $itemData['quantity_size'] ?? '',
                     'procurement_mode' => $itemData['procurement_mode'] ?? 'Public Bidding',
-                    'pre_proc_conference' => (bool) ($itemData['pre_proc_conference'] ?? false),
+                    'pre_proc_conference' => $itemBudget >= 5000000 ? true : (bool) ($itemData['pre_proc_conference'] ?? false),
                     'start_date' => $itemData['start_date'] ?? null,
                     'end_date' => $itemData['end_date'] ?? null,
                     'delivery_period' => $itemData['delivery_period'] ?? null,
-                    'source_of_fund' => $itemData['source_of_fund'] ?? 'General Fund',
+                    'source_of_fund' => $itemData['source_of_fund'] ?? $sourceOfFund,
                     'estimated_budget' => $itemBudget,
                     'supporting_docs_text' => $itemData['supporting_docs_text'] ?? null,
                     'remarks' => $itemData['remarks'] ?? null,
@@ -520,6 +545,8 @@ class PpmpController extends Controller
             'office_name' => 'nullable|string',
             'project_title' => 'nullable|string',
             'total_budget' => 'nullable|numeric',
+            'other_terms' => 'nullable|string',
+            'additional_condition' => 'nullable|string',
             'charges' => 'nullable|string',
             'place_of_delivery' => 'nullable|string',
             'payment_method' => 'nullable|string',
@@ -530,19 +557,50 @@ class PpmpController extends Controller
             'submitted_by_position' => 'nullable|string',
             'approved_by_name' => 'nullable|string',
             'approved_by_position' => 'nullable|string',
-            'rows' => 'required|array',
+            'rows' => 'nullable|array',
+            'attachment_lists' => 'nullable|array',
+            'active_item_id' => 'nullable',
         ]);
 
-        $ppmp->update([
-            'attachment_list_data' => $validated,
-        ]);
+        if (empty($validated['rows']) && empty($validated['attachment_lists'])) {
+            return response()->json(['message' => 'The rows or attachment_lists field is required.'], 422);
+        }
+
+        // Merge with existing attachment_list_data if already present, preserving keys
+        $existingData = is_array($ppmp->attachment_list_data) ? $ppmp->attachment_list_data : [];
+        if (!empty($validated['attachment_lists'])) {
+            $mergedLists = $existingData['attachment_lists'] ?? [];
+            foreach ($validated['attachment_lists'] as $key => $listVal) {
+                $mergedLists[$key] = $listVal;
+            }
+            $validated['attachment_lists'] = $mergedLists;
+        }
+
+        $ppmpUpdates = ['attachment_list_data' => $validated];
+        if (array_key_exists('other_terms', $validated)) {
+            $ppmpUpdates['warranty_and_other_terms'] = $validated['other_terms'];
+        }
+        if (array_key_exists('additional_condition', $validated)) {
+            $ppmpUpdates['additional_condition'] = $validated['additional_condition'];
+        }
+        if (array_key_exists('place_of_delivery', $validated) && $validated['place_of_delivery']) {
+            $ppmpUpdates['place_of_delivery'] = $validated['place_of_delivery'];
+        }
+        if (array_key_exists('payment_method', $validated) && $validated['payment_method']) {
+            $ppmpUpdates['payment_method'] = $validated['payment_method'];
+        }
+        if (array_key_exists('delivery_period', $validated) && $validated['delivery_period']) {
+            $ppmpUpdates['delivery_period'] = $validated['delivery_period'];
+        }
+
+        $ppmp->update($ppmpUpdates);
 
         AuditLog::log(
             'PPMP_ATTACHMENT_LIST_GENERATED',
             'ppmps',
             $ppmp->id,
             null,
-            ['items_count' => count($validated['rows'])],
+            ['items_count' => count($validated['rows'] ?? [])],
             $user->id
         );
 

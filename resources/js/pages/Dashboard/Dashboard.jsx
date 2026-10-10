@@ -8,7 +8,17 @@ import { AdminSidebar } from '../../components/Dashboard/AdminSidebar';
 import { AdminVisualAnalytics } from '../../components/Dashboard/AdminVisualAnalytics';
 import { AdminReportsView } from '../../components/Dashboard/AdminReportsView';
 import { AdminActivityLog } from '../../components/Dashboard/AdminActivityLog';
+import { FundSourcesManagement } from '../../components/Dashboard/FundSourcesManagement';
+import { ProcurementConditionsManagement } from '../../components/Dashboard/ProcurementConditionsManagement';
+import { OtherTermsManagement } from '../../components/Dashboard/OtherTermsManagement';
+import { SystemSettingsManagement } from '../../components/Dashboard/SystemSettingsManagement';
+import { isDeveloperModeActive } from '../../utils/devToolsGuard';
 import { AdminDashboard } from './AdminDashboard';
+import {
+    PimsPublishReminderCard,
+    getPpmpStartOfActivity,
+    getPimsReminderInfo
+} from '../../components/Dashboard/PimsPublishReminderCard';
 import {
     FileText,
     Clock,
@@ -51,8 +61,36 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
     const recentPpmps = data?.recent_ppmps || [];
     const analytics = data?.analytics || null;
 
-    // Admin Sidebar active navigation tab ('overview', 'analytics', 'reports', 'offices', 'users', 'signatories')
+    // Admin Sidebar active navigation tab ('overview', 'analytics', 'reports', 'offices', 'users', 'signatories', 'settings')
     const [adminSection, setAdminSection] = useState('overview');
+
+    // Live Developer Mode status
+    const [devModeActive, setDevModeActive] = useState(() => isDeveloperModeActive());
+    useEffect(() => {
+        const handleDevModeChange = (e) => {
+            if (e.detail && typeof e.detail.developer_mode !== 'undefined') {
+                setDevModeActive(Boolean(e.detail.developer_mode));
+            }
+        };
+        const handleAdminNav = (e) => {
+            if (e.detail?.section) {
+                setAdminSection(e.detail.section);
+            }
+        };
+        const handleDataReload = () => {
+            if (onReload) onReload();
+        };
+
+        window.addEventListener('developer_mode:changed', handleDevModeChange);
+        window.addEventListener('admin:navigate_section', handleAdminNav);
+        window.addEventListener('app:data_reload', handleDataReload);
+
+        return () => {
+            window.removeEventListener('developer_mode:changed', handleDevModeChange);
+            window.removeEventListener('admin:navigate_section', handleAdminNav);
+            window.removeEventListener('app:data_reload', handleDataReload);
+        };
+    }, [onReload]);
 
     // Signatories state for Admin view
     const [signatoriesList, setSignatoriesList] = useState(data?.signatories || []);
@@ -210,6 +248,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
             if (onReload) {
                 await onReload();
             }
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to mark document as received.');
         } finally {
@@ -661,12 +700,16 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                 <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold ${
                                                     sig.signatory_type === 'budget_requirement'
                                                         ? 'bg-indigo-100 text-indigo-800'
+                                                        : sig.signatory_type === 'pacco_requirement'
+                                                        ? 'bg-teal-100 text-teal-800'
                                                         : sig.signatory_type === 'bac_secretariat'
                                                         ? 'bg-purple-100 text-purple-800'
                                                         : 'bg-emerald-100 text-emerald-800'
                                                 }`}>
                                                     {sig.signatory_type === 'budget_requirement'
-                                                        ? 'Reviewed as to Budgetary Requirement'
+                                                        ? 'Reviewed as to Budgetary Requirement (PBO)'
+                                                        : sig.signatory_type === 'pacco_requirement'
+                                                        ? 'Reviewed as to Budgetary Requirement (PACCO)'
                                                         : sig.signatory_type === 'bac_secretariat'
                                                         ? 'Reviewed by BAC-Secretariat'
                                                         : 'Approved by: (Governor)'}
@@ -736,6 +779,18 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
             if (adminSection === 'logs') {
                 return <AdminActivityLog />;
             }
+            if (adminSection === 'fund_sources') {
+                return <FundSourcesManagement />;
+            }
+            if (adminSection === 'conditions') {
+                return <ProcurementConditionsManagement />;
+            }
+            if (adminSection === 'other_terms') {
+                return <OtherTermsManagement />;
+            }
+            if (adminSection === 'settings') {
+                return <SystemSettingsManagement />;
+            }
             // For 'overview', 'offices', 'users' — we render the full scrollable content below
             return null;
         };
@@ -764,7 +819,20 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 System Executive Administration &amp; Analytics • E-Procurement Management
                             </p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                            <button
+                                type="button"
+                                onClick={() => setAdminSection('settings')}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition border cursor-pointer ${
+                                    devModeActive 
+                                        ? 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100' 
+                                        : 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
+                                }`}
+                                title="Click to manage Developer Mode / DevTools Security"
+                            >
+                                <span className={`w-2 h-2 rounded-full ${devModeActive ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`} />
+                                <span>Dev Mode: {devModeActive ? 'ACTIVE (F12 Allowed)' : 'OFF (Strict Protected)'}</span>
+                            </button>
                             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                 System Online
@@ -824,6 +892,9 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                     </div>
                                 </div>
                             )}
+
+                            {/* System Security & Developer Mode Governance */}
+                            {adminSection === 'overview' && <SystemSettingsManagement />}
 
                             {/* Signatories — shown in overview too */}
                             {adminSection === 'overview' && SignatoriesPanel}
@@ -930,6 +1001,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                                             u.role === 'budget_officer' ? 'bg-indigo-100 text-indigo-800' :
                                                                             u.role === 'oppmo' ? 'bg-purple-100 text-purple-800' :
                                                                             u.role === 'twg' ? 'bg-amber-100 text-amber-800' :
+                                                                            u.role === 'pacco' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
                                                                             u.role === 'head' ? 'bg-blue-100 text-blue-800' :
                                                                             u.role === 'authorized_staff' ? 'bg-teal-100 text-teal-800 border border-teal-300' :
                                                                             'bg-slate-100 text-slate-700'
@@ -939,6 +1011,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                                              u.role === 'budget_officer' ? 'Budget Officer' :
                                                                              u.role === 'oppmo' ? 'OPPMO' :
                                                                              u.role === 'twg' ? 'TWG' :
+                                                                             u.role === 'pacco' ? 'PACCO Reviewer' :
                                                                              u.role === 'head' ? 'Head of Office' :
                                                                              u.role === 'authorized_staff' ? 'Authorize Staff' :
                                                                              'End User'}
@@ -1250,18 +1323,19 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">Signatory Role / Box</label>
                                     <select value={signatoryForm.signatory_type} onChange={e => setSignatoryForm(f => ({ ...f, signatory_type: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-                                        <option value="budget_requirement">Reviewed as to Budgetary Requirement</option>
+                                        <option value="budget_requirement">Reviewed as to Budgetary Requirement (Provincial Budget Office)</option>
+                                        <option value="pacco_requirement">Reviewed as to Budgetary Requirement (PACCO / Trust Fund)</option>
                                         <option value="bac_secretariat">Reviewed by BAC-Secretariat</option>
-                                        <option value="governor">Approved by: (Governor)</option>
+                                        <option value="approved_by">Approved by: (Governor)</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">Full Official Name</label>
-                                    <input type="text" value={signatoryForm.name} onChange={e => setSignatoryForm(f => ({ ...f, name: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. Hon. Maria Clara Santos" required />
+                                    <input type="text" value={signatoryForm.name || ''} onChange={e => setSignatoryForm(f => ({ ...f, name: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. Hon. Maria Clara Santos" required />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">Position / Designation</label>
-                                    <input type="text" value={signatoryForm.position} onChange={e => setSignatoryForm(f => ({ ...f, position: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. Provincial Budget Officer" required />
+                                    <input type="text" value={signatoryForm.position || ''} onChange={e => setSignatoryForm(f => ({ ...f, position: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. Provincial Budget Officer" required />
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <input type="checkbox" id="sig-active" checked={signatoryForm.is_active} onChange={e => setSignatoryForm(f => ({ ...f, is_active: e.target.checked }))} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
@@ -1338,24 +1412,24 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-700 mb-1">Abbreviation / Code</label>
-                                        <input type="text" value={officeForm.abbreviation} onChange={e => setOfficeForm(f => ({ ...f, abbreviation: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. PBO" required />
+                                        <input type="text" value={officeForm.abbreviation || ''} onChange={e => setOfficeForm(f => ({ ...f, abbreviation: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. PBO" required />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-700 mb-1">Responsibility No.</label>
-                                        <input type="text" value={officeForm.responsibility_number} onChange={e => setOfficeForm(f => ({ ...f, responsibility_number: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. 1021" />
+                                        <input type="text" value={officeForm.responsibility_number || ''} onChange={e => setOfficeForm(f => ({ ...f, responsibility_number: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. 1021" />
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">Office Name</label>
-                                    <input type="text" value={officeForm.office_name} onChange={e => setOfficeForm(f => ({ ...f, office_name: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Full office name" required />
+                                    <input type="text" value={officeForm.office_name || ''} onChange={e => setOfficeForm(f => ({ ...f, office_name: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Full office name" required />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">Head of Office</label>
-                                    <input type="text" value={officeForm.head_name} onChange={e => setOfficeForm(f => ({ ...f, head_name: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Full name of office head" />
+                                    <input type="text" value={officeForm.head_name || ''} onChange={e => setOfficeForm(f => ({ ...f, head_name: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Full name of office head" />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-700 mb-1">Designation / Title</label>
-                                    <input type="text" value={officeForm.designation} onChange={e => setOfficeForm(f => ({ ...f, designation: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. Provincial Budget Officer" />
+                                    <input type="text" value={officeForm.designation || ''} onChange={e => setOfficeForm(f => ({ ...f, designation: e.target.value }))} className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="e.g. Provincial Budget Officer" />
                                 </div>
                                 <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2">
                                     <button type="button" onClick={() => setIsOfficeModalOpen(false)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition">Cancel</button>
@@ -1550,7 +1624,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                         Welcome, {user?.name}
                     </h1>
                     <p className="text-xs text-slate-500 mt-1">
-                        Procurement Management Workspace • {user?.office?.name}
+                        Procurement Management Workspace • {user?.office?.name || (user?.role === 'pacco' ? 'Provincial Accounting Office' : 'Provincial Capitol')}
                     </p>
                 </div>
 
@@ -1666,7 +1740,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                     </>
                 )}
 
-                {(user?.role === 'budget_officer' || user?.role === 'oppmo' || user?.role === 'twg') && (
+                {(user?.role === 'budget_officer' || user?.role === 'oppmo' || user?.role === 'twg' || user?.role === 'pacco') && (
                     <>
                         <div className="bg-white p-4 rounded-xl border-2 border-blue-200 shadow-xs flex items-center gap-3">
                             <div className="p-3 bg-blue-100 text-blue-700 rounded-lg">
@@ -1674,7 +1748,9 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                             </div>
                             <div>
                                 <div className="text-2xl font-black text-blue-900">{metrics.pending_review || 0}</div>
-                                <div className="text-xs font-bold text-slate-700 uppercase">Pending Your Review</div>
+                                <div className="text-xs font-bold text-slate-700 uppercase">
+                                    {user?.role === 'pacco' ? 'Under Review Queue' : 'Pending Your Review'}
+                                </div>
                             </div>
                         </div>
 
@@ -1684,7 +1760,9 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                             </div>
                             <div>
                                 <div className="text-xl font-black text-emerald-900">{metrics.approved || 0}</div>
-                                <div className="text-xs font-medium text-slate-500">Cleared & Approved</div>
+                                <div className="text-xs font-medium text-slate-500">
+                                    {user?.role === 'pacco' ? 'Cleared & Ready to Print' : 'Cleared & Approved'}
+                                </div>
                             </div>
                         </div>
 
@@ -1706,6 +1784,18 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 <div>
                                     <div className="text-xl font-black text-emerald-900">{metrics.ready_to_print || 0}</div>
                                     <div className="text-xs font-medium text-slate-500">Ready to Print</div>
+                                </div>
+                            </div>
+                        )}
+
+                        {user?.role === 'pacco' && (
+                            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex items-center gap-3">
+                                <div className="p-3 bg-teal-100 text-teal-700 rounded-lg">
+                                    <FileText className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <div className="text-xl font-black text-teal-900">{metrics.total_review || metrics.total || 0}</div>
+                                    <div className="text-xs font-medium text-slate-500">Total Review PPMPs</div>
                                 </div>
                             </div>
                         )}
@@ -1777,6 +1867,14 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                 )}
             </div>
 
+            {/* End-User PIMS Procurement Publishing Reminders */}
+            {user?.role === 'end_user' && (
+                <PimsPublishReminderCard
+                    ppmps={recentPpmps}
+                    onOpenPpmp={(uuid) => handleOpenDetails(uuid)}
+                />
+            )}
+
             {/* Admin Management Section for Official Signatories */}
             {user?.role === 'admin' && (
                 <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
@@ -1832,12 +1930,16 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold ${
                                                         sig.signatory_type === 'budget_requirement'
                                                             ? 'bg-indigo-100 text-indigo-800'
+                                                            : sig.signatory_type === 'pacco_requirement'
+                                                            ? 'bg-teal-100 text-teal-800'
                                                             : sig.signatory_type === 'bac_secretariat'
                                                             ? 'bg-purple-100 text-purple-800'
                                                             : 'bg-emerald-100 text-emerald-800'
                                                     }`}>
                                                         {sig.signatory_type === 'budget_requirement'
-                                                            ? 'Reviewed as to Budgetary Requirement'
+                                                            ? 'Reviewed as to Budgetary Requirement (PBO)'
+                                                            : sig.signatory_type === 'pacco_requirement'
+                                                            ? 'Reviewed as to Budgetary Requirement (PACCO)'
                                                             : sig.signatory_type === 'bac_secretariat'
                                                             ? 'Reviewed by BAC- Secretariat'
                                                             : 'Approved by: (Governor)'}
@@ -2129,17 +2231,19 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                             u.role === 'budget_officer' ? 'bg-indigo-100 text-indigo-800' :
                                                                 u.role === 'oppmo' ? 'bg-purple-100 text-purple-800' :
                                                                     u.role === 'twg' ? 'bg-cyan-100 text-cyan-800' :
-                                                                        u.role === 'head' ? 'bg-amber-100 text-amber-800' :
-                                                                            u.role === 'authorized_staff' ? 'bg-teal-100 text-teal-800 border border-teal-300' :
-                                                                                'bg-blue-100 text-blue-800'
+                                                                        u.role === 'pacco' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                                                                            u.role === 'head' ? 'bg-amber-100 text-amber-800' :
+                                                                                u.role === 'authorized_staff' ? 'bg-teal-100 text-teal-800 border border-teal-300' :
+                                                                                    'bg-blue-100 text-blue-800'
                                                             }`}>
                                                             {u.role === 'admin' ? 'Administrator' :
                                                                 u.role === 'budget_officer' ? 'Budget Officer' :
                                                                     u.role === 'oppmo' ? 'OPPMO / Secretariat' :
                                                                         u.role === 'twg' ? 'BAC-TWG Evaluator' :
-                                                                            u.role === 'head' ? 'Department Head' :
-                                                                                u.role === 'authorized_staff' ? 'Authorize Staff' :
-                                                                                    'End User'}
+                                                                            u.role === 'pacco' ? 'PACCO Reviewer' :
+                                                                                u.role === 'head' ? 'Department Head' :
+                                                                                    u.role === 'authorized_staff' ? 'Authorize Staff' :
+                                                                                        'End User'}
                                                         </span>
                                                         {/* Uploaded Documents for Authorized Staff */}
                                                         {u.role === 'authorized_staff' && (
@@ -2833,6 +2937,50 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 dot: 'bg-rose-500',
                             },
                         ];
+                    } else if (role === 'pacco') {
+                        // PACCO Reviewer: All Review Queue, Under Review, Cleared / Ready to Print, Returned with Remarks
+                        tabs = [
+                            {
+                                key: 'all',
+                                label: 'All Review PPMPs',
+                                count: counts.all,
+                                activeClass: 'bg-slate-900 text-white border-slate-900 shadow-sm',
+                                inactiveClass: 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100',
+                                activeBadge: 'bg-slate-800 text-slate-200',
+                                inactiveBadge: 'bg-slate-100 text-slate-700 border border-slate-200',
+                                dot: 'bg-slate-500',
+                            },
+                            {
+                                key: 'IN_REVIEW',
+                                label: 'Under Review',
+                                count: recentPpmps.filter(p => ['BUDGET_OFFICER_REVIEW', 'OPPMO_REVIEW', 'TWG_REVIEW', 'HEAD_APPROVED'].includes(p.status)).length,
+                                activeClass: 'bg-emerald-600 text-white border-emerald-600 shadow-sm',
+                                inactiveClass: 'bg-emerald-50/70 text-emerald-900 border-emerald-200 hover:bg-emerald-100',
+                                activeBadge: 'bg-emerald-800 text-emerald-100',
+                                inactiveBadge: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
+                                dot: 'bg-emerald-500',
+                            },
+                            {
+                                key: 'READY_TO_PRINT',
+                                label: 'Cleared / Ready to Print',
+                                count: counts.READY_TO_PRINT,
+                                activeClass: 'bg-teal-600 text-white border-teal-600 shadow-sm',
+                                inactiveClass: 'bg-teal-50/70 text-teal-900 border-teal-200 hover:bg-teal-100',
+                                activeBadge: 'bg-teal-800 text-teal-100',
+                                inactiveBadge: 'bg-teal-100 text-teal-800 border border-teal-300',
+                                dot: 'bg-teal-500',
+                            },
+                            {
+                                key: 'RETURNED',
+                                label: 'Returned with Remarks',
+                                count: counts.RETURNED,
+                                activeClass: 'bg-rose-600 text-white border-rose-600 shadow-sm',
+                                inactiveClass: 'bg-rose-50/70 text-rose-900 border-rose-200 hover:bg-rose-100',
+                                activeBadge: 'bg-rose-800 text-rose-100',
+                                inactiveBadge: 'bg-rose-100 text-rose-800 border border-rose-300',
+                                dot: 'bg-rose-500',
+                            },
+                        ];
                     } else {
                         // Admin: Complete global breakdown
                         tabs = [
@@ -3155,8 +3303,29 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="p-3 font-medium text-slate-800 max-w-xs truncate" title={ppmp.title}>
-                                            {ppmp.title}
+                                        <td className="p-3 font-medium text-slate-800 max-w-xs" title={ppmp.title}>
+                                            <div className="truncate font-semibold">{ppmp.title}</div>
+                                            {(() => {
+                                                const schedule = getPpmpStartOfActivity(ppmp);
+                                                if (!schedule) return null;
+                                                const rem = getPimsReminderInfo(schedule);
+                                                if (!rem) return null;
+                                                return (
+                                                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                                        <span
+                                                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                                                rem.isUrgent
+                                                                    ? 'bg-rose-100 text-rose-800 border border-rose-300 animate-pulse'
+                                                                    : 'bg-amber-50 text-amber-900 border border-amber-200'
+                                                            }`}
+                                                            title={rem.message}
+                                                        >
+                                                            {rem.isUrgent ? <AlertTriangle className="w-2.5 h-2.5 text-rose-600" /> : <Clock className="w-2.5 h-2.5 text-amber-600" />}
+                                                            PIMS: Start {schedule.summaryLabel} {rem.isNearEnd && '(Near End of Month)'}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="p-3 text-slate-600">
                                             CY {ppmp.fiscal_year} ({ppmp.plan_type})
@@ -3296,6 +3465,9 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                     <option value="budget_requirement">
                                         Reviewed as to Budgetary Requirement (Provincial Budget Office)
                                     </option>
+                                    <option value="pacco_requirement">
+                                        Reviewed as to Budgetary Requirement (PACCO / Trust Fund)
+                                    </option>
                                     <option value="bac_secretariat">
                                         Reviewed by BAC- Secretariat (OPPMO / BAC Secretariat)
                                     </option>
@@ -3315,7 +3487,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 <input
                                     type="text"
                                     required
-                                    value={signatoryForm.name}
+                                    value={signatoryForm.name || ''}
                                     onChange={(e) => setSignatoryForm({ ...signatoryForm, name: e.target.value })}
                                     placeholder={signatoryForm.signatory_type === 'approved_by' ? 'e.g. Hon. Yvonne R. Cagas' : 'e.g. Atty. Roberto G. Almendras, CPA'}
                                     className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold text-slate-900"
@@ -3329,7 +3501,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 <input
                                     type="text"
                                     required
-                                    value={signatoryForm.position}
+                                    value={signatoryForm.position || ''}
                                     onChange={(e) => setSignatoryForm({ ...signatoryForm, position: e.target.value })}
                                     placeholder={signatoryForm.signatory_type === 'approved_by' ? 'e.g. Provincial Governor' : 'e.g. Provincial Budget Officer or Head BAC Secretariat'}
                                     className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800"
@@ -3506,7 +3678,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                     <input
                                         type="text"
                                         required
-                                        value={officeForm.abbreviation}
+                                        value={officeForm.abbreviation || ''}
                                         onChange={(e) => setOfficeForm({ ...officeForm, abbreviation: e.target.value })}
                                         placeholder="e.g. PGO-ICTD"
                                         className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono font-bold text-blue-900 uppercase"
@@ -3518,7 +3690,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                     </label>
                                     <input
                                         type="text"
-                                        value={officeForm.responsibility_number}
+                                        value={officeForm.responsibility_number || ''}
                                         onChange={(e) => setOfficeForm({ ...officeForm, responsibility_number: e.target.value })}
                                         placeholder="e.g. 1011 or 1021"
                                         className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-slate-800"
@@ -3533,7 +3705,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 <input
                                     type="text"
                                     required
-                                    value={officeForm.office_name}
+                                    value={officeForm.office_name || ''}
                                     onChange={(e) => setOfficeForm({ ...officeForm, office_name: e.target.value })}
                                     placeholder="e.g. Provincial Governor's Office - ICT Division"
                                     className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none font-medium text-slate-900"
@@ -3546,7 +3718,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 </label>
                                 <input
                                     type="text"
-                                    value={officeForm.head_name}
+                                    value={officeForm.head_name || ''}
                                     onChange={(e) => setOfficeForm({ ...officeForm, head_name: e.target.value })}
                                     placeholder="e.g. Hon. Maria Clara Santos"
                                     className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800"
@@ -3559,7 +3731,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                 </label>
                                 <input
                                     type="text"
-                                    value={officeForm.designation}
+                                    value={officeForm.designation || ''}
                                     onChange={(e) => setOfficeForm({ ...officeForm, designation: e.target.value })}
                                     placeholder="e.g. Department Head / Provincial ICT Officer"
                                     className="w-full text-xs p-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800"

@@ -8,10 +8,13 @@ import { PPMPListPage } from './pages/PPMP/PPMPListPage';
 import { PPMPDetailPage } from './pages/PPMP/PPMPDetailPage';
 import { PPMPFormPage } from './pages/PPMP/PPMPFormPage';
 import { PrivacyPolicyPage } from './pages/Privacy/PrivacyPolicyPage';
+import { SourceOfFundModal, FUND_SOURCES } from './components/PPMP/SourceOfFundModal';
+import { initDevToolsGuard } from './utils/devToolsGuard';
 
 export function App() {
     const [user, setUser] = useState(() => window.App?.user || null);
     const [loading, setLoading] = useState(() => !window.App?.user && window.App !== undefined ? false : false);
+    const [authErrorMessage, setAuthErrorMessage] = useState('');
     const [currentView, setCurrentView] = useState(() => {
         if (window.location.pathname === '/privacy') return 'privacy';
         return 'dashboard';
@@ -19,6 +22,8 @@ export function App() {
     const [selectedPpmpUuid, setSelectedPpmpUuid] = useState(null);
     const [currentPpmp, setCurrentPpmp] = useState(null);
     const [dashboardData, setDashboardData] = useState(null);
+    const [selectedSourceOfFund, setSelectedSourceOfFund] = useState(FUND_SOURCES.GENERAL_FUND);
+    const [isSourceOfFundModalOpen, setIsSourceOfFundModalOpen] = useState(false);
 
     // Check existing session if needed
     const checkAuth = async () => {
@@ -65,14 +70,50 @@ export function App() {
         }
     };
 
+    const handleNavigate = (view) => {
+        if (view === 'create') {
+            setIsSourceOfFundModalOpen(true);
+            return;
+        }
+        if (view === 'users') {
+            setCurrentView('dashboard');
+            loadDashboard();
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('admin:navigate_section', { detail: { section: 'users' } }));
+            }, 50);
+            return;
+        }
+        setCurrentView(view);
+        if (view === 'dashboard') loadDashboard();
+    };
+
+    const handleSelectSourceOfFund = (fund) => {
+        setSelectedSourceOfFund(fund);
+        setIsSourceOfFundModalOpen(false);
+        setCurrentView('create');
+    };
+
     useEffect(() => {
+        initDevToolsGuard();
         checkAuth();
 
-        const handleUnauthorized = () => {
+        const handleUnauthorized = (e) => {
+            setUser(null);
+            setCurrentView('dashboard');
+            if (e?.detail?.reason) {
+                setAuthErrorMessage(e.detail.reason);
+            }
+        };
+        window.addEventListener('auth:unauthorized', handleUnauthorized);
+
+        const handleDevToolsUnauthorized = (e) => {
+            if (e?.detail?.message) {
+                setAuthErrorMessage(e.detail.message);
+            }
             setUser(null);
             setCurrentView('dashboard');
         };
-        window.addEventListener('auth:unauthorized', handleUnauthorized);
+        window.addEventListener('devtools:unauthorized', handleDevToolsUnauthorized);
 
         const handlePopState = () => {
             if (window.location.pathname === '/privacy') {
@@ -85,6 +126,7 @@ export function App() {
 
         return () => {
             window.removeEventListener('auth:unauthorized', handleUnauthorized);
+            window.removeEventListener('devtools:unauthorized', handleDevToolsUnauthorized);
             window.removeEventListener('popstate', handlePopState);
         };
     }, []);
@@ -94,6 +136,21 @@ export function App() {
             loadDashboard();
         }
     }, [user, currentView]);
+
+    useEffect(() => {
+        const handleDataReload = (e) => {
+            if (!user) return;
+            if (currentView === 'dashboard') {
+                loadDashboard();
+            } else if (currentView === 'detail' && selectedPpmpUuid) {
+                if (!e?.detail?.ppmpUuid || e.detail.ppmpUuid === selectedPpmpUuid) {
+                    loadPpmpDetail(selectedPpmpUuid);
+                }
+            }
+        };
+        window.addEventListener('app:data_reload', handleDataReload);
+        return () => window.removeEventListener('app:data_reload', handleDataReload);
+    }, [user, currentView, selectedPpmpUuid]);
 
     const handleLogout = async () => {
         try {
@@ -133,8 +190,13 @@ export function App() {
     if (!user) {
         return (
             <LoginPage
+                initialError={authErrorMessage}
                 onLoginSuccess={(loggedInUser) => {
+                    setAuthErrorMessage('');
                     setUser(loggedInUser);
+                    if (window.App) {
+                        window.App.user = loggedInUser;
+                    }
                     setCurrentView('dashboard');
                 }}
                 onOpenPrivacy={() => {
@@ -149,10 +211,7 @@ export function App() {
         <MainLayout
             user={user}
             activeTab={currentView}
-            onNavigate={(view) => {
-                setCurrentView(view);
-                if (view === 'dashboard') loadDashboard();
-            }}
+            onNavigate={handleNavigate}
             onSelectPpmp={(uuid) => loadPpmpDetail(uuid)}
             onLogout={handleLogout}
             onUserUpdate={(updatedUser) => setUser(updatedUser)}
@@ -162,7 +221,7 @@ export function App() {
                     user={user}
                     data={dashboardData}
                     onSelectPpmp={(uuid) => loadPpmpDetail(uuid)}
-                    onNavigate={(view) => setCurrentView(view)}
+                    onNavigate={handleNavigate}
                     onReload={loadDashboard}
                 />
             )}
@@ -171,16 +230,18 @@ export function App() {
                 <PPMPListPage
                     user={user}
                     onSelectPpmp={(uuid) => loadPpmpDetail(uuid)}
-                    onNavigate={(view) => setCurrentView(view)}
+                    onNavigate={handleNavigate}
                 />
             )}
 
             {currentView === 'create' && (
                 <PPMPFormPage
                     user={user}
+                    initialSourceOfFund={selectedSourceOfFund}
                     onBack={() => setCurrentView('dashboard')}
                     onSaved={(newPpmp) => {
                         loadPpmpDetail(newPpmp.uuid);
+                        window.dispatchEvent(new CustomEvent('notifications:reload'));
                     }}
                 />
             )}
@@ -192,6 +253,7 @@ export function App() {
                     onBack={() => setCurrentView('detail')}
                     onSaved={(updated) => {
                         loadPpmpDetail(updated.uuid);
+                        window.dispatchEvent(new CustomEvent('notifications:reload'));
                     }}
                 />
             )}
@@ -205,6 +267,12 @@ export function App() {
                     onReload={(targetUuid) => loadPpmpDetail(targetUuid || currentPpmp.uuid)}
                 />
             )}
+
+            <SourceOfFundModal
+                isOpen={isSourceOfFundModalOpen}
+                onClose={() => setIsSourceOfFundModalOpen(false)}
+                onSelect={handleSelectSourceOfFund}
+            />
         </MainLayout>
     );
 }

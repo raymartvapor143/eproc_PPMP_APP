@@ -251,7 +251,7 @@ class UserController extends Controller
             return response()->json(['message' => 'Unauthorized. Only Super Administrators can manage Super Administrator accounts.'], 403);
         }
 
-        $allowedRoles = ['end_user', 'head', 'budget_officer', 'oppmo', 'twg', 'authorized_staff', 'admin'];
+        $allowedRoles = ['end_user', 'head', 'budget_officer', 'oppmo', 'twg', 'authorized_staff', 'pacco', 'admin'];
         if ($admin->isSuperAdmin()) {
             $allowedRoles[] = 'super_admin';
         }
@@ -289,7 +289,7 @@ class UserController extends Controller
         // Access Control: Allow self, admin, or official procurement signatories/reviewers
         $isSelf = $currentUser->id === $targetUser->id;
         $isAdmin = $currentUser->isAdmin();
-        $isOfficialSignatory = in_array($targetUser->role, ['head', 'budget_officer', 'oppmo', 'twg', 'admin', 'super_admin', 'authorized_staff'], true);
+        $isOfficialSignatory = in_array($targetUser->role, ['head', 'budget_officer', 'oppmo', 'twg', 'admin', 'super_admin', 'authorized_staff', 'pacco'], true);
 
         if (!$isSelf && !$isAdmin && !$isOfficialSignatory) {
             // If target user is a regular end user, check if they prepared a PPMP that the current user has rights to view
@@ -297,7 +297,7 @@ class UserController extends Controller
                 ->whereHas('ppmp', function ($q) use ($currentUser) {
                     if ($currentUser->isHead()) {
                         $q->where('office_id', $currentUser->office_id);
-                    } elseif ($currentUser->isBudgetOfficer() || $currentUser->isOppmo() || $currentUser->isTwg()) {
+                    } elseif ($currentUser->isBudgetOfficer() || $currentUser->isOppmo() || $currentUser->isTwg() || $currentUser->isPacco()) {
                         $q->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED']);
                     } else {
                         $q->where('created_by', $currentUser->id);
@@ -333,7 +333,7 @@ class UserController extends Controller
         $isSelf = $currentUser->id === $targetUser->id;
         $isAdmin = $currentUser->isAdmin();
         $isOfficeHead = $currentUser->isHead() && $currentUser->office_id === $targetUser->office_id;
-        $isOfficial = in_array($currentUser->role, ['budget_officer', 'oppmo', 'twg'], true);
+        $isOfficial = in_array($currentUser->role, ['budget_officer', 'oppmo', 'twg', 'pacco'], true);
 
         if (!$isSelf && !$isAdmin && !$isOfficeHead && !$isOfficial) {
             return response()->json(['message' => 'Unauthorized. You do not have permission to view this authorization letter.'], 403);

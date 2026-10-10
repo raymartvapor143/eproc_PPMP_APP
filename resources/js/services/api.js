@@ -135,6 +135,9 @@ export const ppmpService = {
     budgetApprove: (uuid) => api.post(`/ppmps/${uuid}/budget/approve`),
     budgetReturn: (uuid, data) => api.post(`/ppmps/${uuid}/budget/return`, data),
 
+    paccoApprove: (uuid) => api.post(`/ppmps/${uuid}/pacco/approve`),
+    paccoReturn: (uuid, data) => api.post(`/ppmps/${uuid}/pacco/return`, data),
+
     oppmoApprove: (uuid) => api.post(`/ppmps/${uuid}/oppmo/approve`),
     oppmoReturn: (uuid, data) => api.post(`/ppmps/${uuid}/oppmo/return`, data),
 
@@ -214,4 +217,32 @@ export const officeService = {
     importOffices: (rows) => api.post('/offices/import', { rows }),
 };
 
+export const fundSourceService = {
+    getAll: (params) => api.get('/fund-sources', { params }),
+    create: (data) => api.post('/fund-sources', data),
+    update: (id, data) => api.put(`/fund-sources/${id}`, data),
+    delete: (id) => api.delete(`/fund-sources/${id}`),
+};
+
+export const procurementConditionService = {
+    getAll: (params) => api.get('/procurement-conditions', { params }),
+    create: (data) => api.post('/procurement-conditions', data),
+    update: (id, data) => api.put(`/procurement-conditions/${id}`, data),
+    delete: (id) => api.delete(`/procurement-conditions/${id}`),
+};
+
+export const otherTermService = {
+    getAll: (params) => api.get('/other-terms', { params }),
+    create: (data) => api.post('/other-terms', data),
+    update: (id, data) => api.put(`/other-terms/${id}`, data),
+    delete: (id) => api.delete(`/other-terms/${id}`),
+};
+
+export const systemSettingService = {
+    getDeveloperMode: () => api.get('/system-settings/developer-mode'),
+    updateDeveloperMode: (developer_mode) => api.put('/system-settings/developer-mode', { developer_mode }),
+};
+
 export default api;
+
+

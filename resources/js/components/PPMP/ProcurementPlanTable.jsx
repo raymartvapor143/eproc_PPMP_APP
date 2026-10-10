@@ -166,7 +166,7 @@ export const MonthRangeInput = ({ value, onChange, className = "" }) => {
         <div className={`flex flex-col items-center gap-1 min-w-[125px] ${className}`}>
             <input
                 type="month"
-                value={start}
+                value={start || ''}
                 onChange={(e) => handleStartChange(e.target.value)}
                 className="w-full text-[11px] p-1 border border-slate-300 rounded text-center bg-white shadow-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                 title="Select month"
@@ -177,7 +177,7 @@ export const MonthRangeInput = ({ value, onChange, className = "" }) => {
                     <span className="text-[10px] font-bold text-slate-400 select-none">-</span>
                     <input
                         type="month"
-                        value={end}
+                        value={end || ''}
                         onChange={(e) => handleEndChange(e.target.value)}
                         className="w-full text-[11px] p-1 border border-blue-300 bg-blue-50/50 rounded text-center shadow-xs focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                         title="Select end month (optional range)"
@@ -283,7 +283,7 @@ export const ProcurementPlanTable = ({
                                 {isEditable ? (
                                     <div className="flex items-center gap-2">
                                         <textarea
-                                            value={accountCode !== undefined && onAccountCodeChange ? accountCode : (items.find(i => i.is_header)?.description || '')}
+                                            value={(accountCode !== undefined && accountCode !== null && onAccountCodeChange ? accountCode : (items.find(i => i.is_header)?.description || '')) || ''}
                                             onChange={(e) => {
                                                 if (onAccountCodeChange) {
                                                     onAccountCodeChange(e.target.value);
@@ -414,12 +414,20 @@ export const ProcurementPlanTable = ({
                                             {/* Pre-Proc Conf */}
                                             <td className="p-2 text-center">
                                                 {isEditable ? (
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={!!item.pre_proc_conference}
-                                                        onChange={(e) => onUpdateItem(realIdx, 'pre_proc_conference', e.target.checked)}
-                                                        className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4"
-                                                    />
+                                                    <div className="flex flex-col items-center justify-center gap-0.5">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={!!item.pre_proc_conference}
+                                                            onChange={(e) => onUpdateItem(realIdx, 'pre_proc_conference', e.target.checked)}
+                                                            className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer"
+                                                            title={(parseFloat(item.estimated_budget) || 0) >= 5000000 ? "Pre-Procurement Conference (Mandatory for Estimated Budget ₱5,000,000 and above)" : "Pre-Procurement Conference, if applicable (Yes/No)"}
+                                                        />
+                                                        {(parseFloat(item.estimated_budget) || 0) >= 5000000 && (
+                                                            <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 rounded leading-tight" title="Mandatory for ₱5M+">
+                                                                ≥ 5M
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 ) : (
                                                     <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${item.pre_proc_conference ? 'bg-amber-100 text-amber-800' : 'text-slate-500'}`}>
                                                         {item.pre_proc_conference ? 'YES' : 'NO'}
@@ -486,7 +494,10 @@ export const ProcurementPlanTable = ({
                                                         step="0.01"
                                                         min="0"
                                                         value={item.estimated_budget ?? ''}
-                                                        onChange={(e) => onUpdateItem(realIdx, 'estimated_budget', parseFloat(e.target.value) || 0)}
+                                                        onChange={(e) => {
+                                                            const raw = e.target.value;
+                                                            onUpdateItem(realIdx, 'estimated_budget', raw === '' ? '' : (parseFloat(raw) || 0));
+                                                        }}
                                                         placeholder="0.00"
                                                         className="w-full text-xs p-1 border border-slate-300 rounded text-right font-mono font-bold text-blue-900"
                                                     />

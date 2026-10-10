@@ -295,4 +295,81 @@ class PpmpWorkflowTest extends TestCase
         $endUserReceiveRes->assertStatus(200);
         $this->assertNotNull($ppmp->fresh()->enduser_received_at);
     }
+
+    public function test_pre_proc_conference_automatically_checked_when_budget_is_five_million_or_above(): void
+    {
+        $payload = [
+            'title' => 'Large Infrastructure Project',
+            'fiscal_year' => '2026',
+            'source_of_fund' => 'General Fund',
+            'plan_type' => 'INDICATIVE',
+            'items' => [
+                [
+                    'description' => 'Construction of Hospital Wing',
+                    'project_type' => 'Infrastructure',
+                    'quantity_size' => '1 lot',
+                    'procurement_mode' => 'Public Bidding',
+                    'pre_proc_conference' => false, // explicitly false
+                    'estimated_budget' => 5000000,   // 5 million
+                ],
+                [
+                    'description' => 'Minor Maintenance Repair',
+                    'project_type' => 'Goods',
+                    'quantity_size' => '1 unit',
+                    'procurement_mode' => 'Small Value Procurement',
+                    'pre_proc_conference' => false,
+                    'estimated_budget' => 450000,    // Under 5M
+                ]
+            ],
+        ];
+
+        $res = $this->actingAs($this->endUser)->postJson('/api/ppmps', $payload);
+        $res->assertStatus(201);
+
+        $created = Ppmp::latest('id')->first();
+        $this->assertNotNull($created);
+        $items = $created->items()->orderBy('item_no')->get();
+
+        // Item 1 (5,000,000) must have pre_proc_conference = true
+        $this->assertTrue((bool) $items[0]->pre_proc_conference);
+
+        // Item 2 (450,000) retains false
+        $this->assertFalse((bool) $items[1]->pre_proc_conference);
+    }
+
+    public function test_end_user_dashboard_includes_items_with_start_date_for_procurement_reminders(): void
+    {
+        $ppmp = Ppmp::create([
+            'uuid' => (string) Str::uuid(),
+            'ppmp_number' => 101,
+            'title' => 'Office Equipment Procurement',
+            'fiscal_year' => '2026',
+            'source_of_fund' => 'General Fund',
+            'plan_type' => 'INDICATIVE',
+            'total_budget' => 250000,
+            'status' => 'DRAFT',
+            'office_id' => $this->office->id,
+            'created_by' => $this->endUser->id,
+        ]);
+
+        PpmpItem::create([
+            'ppmp_id' => $ppmp->id,
+            'item_no' => 1,
+            'description' => 'Heavy Duty Printers',
+            'project_type' => 'Goods',
+            'start_date' => '8/2026',
+            'estimated_budget' => 250000,
+        ]);
+
+        $res = $this->actingAs($this->endUser)->getJson('/api/dashboard');
+        $res->assertStatus(200);
+        $recent = $res->json('recent_ppmps');
+        $this->assertNotEmpty($recent);
+
+        $found = collect($recent)->firstWhere('uuid', $ppmp->uuid);
+        $this->assertNotNull($found);
+        $this->assertArrayHasKey('items', $found);
+        $this->assertNotEmpty($found['items']);
+        $this->assertEquals('8/2026', $found['items'][0]['start_date']);
+    }
 }

@@ -32,6 +32,7 @@ import {
     Clock,
     Trash2,
     Info,
+    RefreshCw,
 } from 'lucide-react';
 import { SignaturePadModal } from '../UI/SignaturePadModal';
 
@@ -46,13 +47,54 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
     const notifDropdownRef = React.useRef(null);
     const notifContainerRef = React.useRef(null);
 
-    const loadNotifications = async () => {
+    const [loadingNotifs, setLoadingNotifs] = useState(false);
+    const prevLatestNotifIdRef = React.useRef(null);
+    const prevUnreadCountRef = React.useRef(null);
+
+    const loadNotifications = async (isManual = false) => {
+        if (isManual) setLoadingNotifs(true);
         try {
             const res = await notificationService.getAll();
-            setNotifications(res.data.notifications || []);
-            setUnreadCount(res.data.unread_count || 0);
+            const newNotifs = res.data.notifications || [];
+            const newUnreadCount = res.data.unread_count || 0;
+            const latestId = newNotifs.length > 0 ? newNotifs[0].id : null;
+
+            // Detect if notifications or unread count changed after initial load
+            const isInitial = prevLatestNotifIdRef.current === null && prevUnreadCountRef.current === null;
+            const hasChanged = !isInitial && (
+                latestId !== prevLatestNotifIdRef.current || 
+                newUnreadCount !== prevUnreadCountRef.current
+            );
+
+            prevLatestNotifIdRef.current = latestId;
+            prevUnreadCountRef.current = newUnreadCount;
+
+            setNotifications(newNotifs);
+            setUnreadCount(newUnreadCount);
+
+            // If "All Notifications" drawer is open, keep it in sync
+            if (showAllNotifsDrawer) {
+                try {
+                    const allRes = await notificationService.getAll({ all: 1 });
+                    setAllNotifications(allRes.data.notifications || []);
+                } catch (err) {
+                    // ignore
+                }
+            }
+
+            // If notifications have updated, trigger automatic data reload for active views
+            if (hasChanged) {
+                window.dispatchEvent(new CustomEvent('app:data_reload', {
+                    detail: {
+                        unreadCount: newUnreadCount,
+                        latestNotification: newNotifs[0] || null
+                    }
+                }));
+            }
         } catch (e) {
-            console.error(e);
+            console.error('Failed to load notifications', e);
+        } finally {
+            if (isManual) setLoadingNotifs(false);
         }
     };
 
@@ -64,6 +106,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
             const res = await notificationService.getAll({ all: 1 });
             setAllNotifications(res.data.notifications || []);
             setUnreadCount(res.data.unread_count || 0);
+            prevUnreadCountRef.current = res.data.unread_count || 0;
         } catch (err) {
             console.error('Failed to load all notifications', err);
         } finally {
@@ -73,9 +116,24 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
 
     useEffect(() => {
         loadNotifications();
-        const interval = setInterval(loadNotifications, 20000);
-        return () => clearInterval(interval);
-    }, []);
+        const interval = setInterval(() => loadNotifications(false), 20000);
+
+        const handleReloadSignal = () => {
+            loadNotifications(false);
+        };
+        const handleWindowFocus = () => {
+            loadNotifications(false);
+        };
+
+        window.addEventListener('notifications:reload', handleReloadSignal);
+        window.addEventListener('focus', handleWindowFocus);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('notifications:reload', handleReloadSignal);
+            window.removeEventListener('focus', handleWindowFocus);
+        };
+    }, [showAllNotifsDrawer]);
 
     // Profile Modal & Edit States
     const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -217,10 +275,13 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                 prev.map((n) => ({ ...n, read_at: n.read_at || new Date().toISOString() }))
             );
             setUnreadCount(0);
+            prevUnreadCountRef.current = 0;
             await notificationService.markAllAsRead();
+            loadNotifications(false);
+            window.dispatchEvent(new CustomEvent('app:data_reload'));
         } catch (e) {
             console.error('Failed to mark all read', e);
-            loadNotifications();
+            loadNotifications(false);
         }
     };
 
@@ -230,10 +291,13 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
             setNotifications((prev) => prev.filter((n) => n.id !== notifId));
             setAllNotifications((prev) => prev.filter((n) => n.id !== notifId));
             setUnreadCount((prev) => Math.max(0, prev - 1));
+            prevUnreadCountRef.current = Math.max(0, (prevUnreadCountRef.current || 1) - 1);
             await notificationService.delete(notifId);
+            loadNotifications(false);
+            window.dispatchEvent(new CustomEvent('app:data_reload'));
         } catch (err) {
             console.error('Failed to dismiss notification', err);
-            loadNotifications();
+            loadNotifications(false);
         }
     };
 
@@ -243,10 +307,13 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
             setNotifications([]);
             setAllNotifications([]);
             setUnreadCount(0);
+            prevUnreadCountRef.current = 0;
             await notificationService.clearAll();
+            loadNotifications(false);
+            window.dispatchEvent(new CustomEvent('app:data_reload'));
         } catch (err) {
             console.error('Failed to clear all notifications', err);
-            loadNotifications();
+            loadNotifications(false);
         }
     };
 
@@ -261,6 +328,9 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
             await ppmpService.receive(receiveRequiredPpmp.uuid);
             const targetUuid = receiveRequiredPpmp.uuid;
             setReceiveRequiredPpmp(null);
+            loadNotifications(false);
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
+            window.dispatchEvent(new CustomEvent('app:data_reload', { detail: { ppmpUuid: targetUuid } }));
             if (onSelectPpmp) {
                 onSelectPpmp(targetUuid);
             }
@@ -283,6 +353,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                     prev.map((n) => (n.id === notif.id ? { ...n, read_at: new Date().toISOString() } : n))
                 );
                 setUnreadCount((prev) => Math.max(0, prev - 1));
+                prevUnreadCountRef.current = Math.max(0, (prevUnreadCountRef.current || 1) - 1);
             } catch (e) {
                 console.error('Failed to mark notification read', e);
             }
@@ -301,6 +372,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
 
             if (onSelectPpmp) {
                 onSelectPpmp(notif.ppmp.uuid);
+                window.dispatchEvent(new CustomEvent('app:data_reload', { detail: { ppmpUuid: notif.ppmp.uuid } }));
                 return;
             }
         }
@@ -308,12 +380,14 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
         if (['admin', 'super_admin'].includes(user?.role) && (notif.title?.toLowerCase().includes('user') || notif.message?.toLowerCase().includes('registered'))) {
             if (onNavigate) {
                 onNavigate('users');
+                window.dispatchEvent(new CustomEvent('app:data_reload'));
                 return;
             }
         }
 
         if (onNavigate) {
             onNavigate('dashboard');
+            window.dispatchEvent(new CustomEvent('app:data_reload'));
         }
     };
 
@@ -325,6 +399,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
             case 'budget_officer': return 'Provincial Budget Officer';
             case 'oppmo': return 'OPPMO / BAC Secretariat';
             case 'twg': return 'BAC-TWG Evaluator';
+            case 'pacco': return 'PACCO Reviewer';
             case 'super_admin': return 'Super Administrator';
             case 'admin': return 'Administrator';
             default: return role;
@@ -383,7 +458,13 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                             {/* Notification Bell */}
                             <div className="relative" ref={notifContainerRef}>
                                 <button
-                                    onClick={() => setShowNotifMenu(!showNotifMenu)}
+                                    onClick={() => {
+                                        const nextState = !showNotifMenu;
+                                        setShowNotifMenu(nextState);
+                                        if (nextState) {
+                                            loadNotifications(true);
+                                        }
+                                    }}
                                     className="p-1.5 sm:p-2 text-slate-300 hover:text-white relative rounded-full hover:bg-slate-800 transition"
                                 >
                                     <Bell className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -408,6 +489,17 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                                         {unreadCount} new
                                                     </span>
                                                 )}
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        loadNotifications(true);
+                                                    }}
+                                                    className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition cursor-pointer"
+                                                    title="Reload notification data"
+                                                >
+                                                    <RefreshCw className={`w-3 h-3 ${loadingNotifs ? 'animate-spin text-blue-400' : ''}`} />
+                                                </button>
                                             </div>
                                             {unreadCount > 0 && (
                                                 <button
@@ -687,7 +779,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                             type="text"
                                             required
                                             disabled={!isEditingProfile}
-                                            value={profileForm.name}
+                                            value={profileForm.name || ''}
                                             onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
                                             className="w-full text-xs pl-9 pr-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition disabled:bg-slate-50 disabled:text-slate-600 bg-white text-slate-800"
                                             placeholder="Your full name"
@@ -722,7 +814,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                         <input
                                             type="tel"
                                             disabled={!isEditingProfile}
-                                            value={profileForm.phone_number}
+                                            value={profileForm.phone_number || ''}
                                             onChange={(e) => setProfileForm({ ...profileForm, phone_number: e.target.value })}
                                             placeholder="e.g. 0912 345 6789"
                                             className="w-full text-xs pl-9 pr-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition disabled:bg-slate-50 disabled:text-slate-600 bg-white text-slate-800"
@@ -737,7 +829,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                     <input
                                         type="text"
                                         disabled={!isEditingProfile}
-                                        value={profileForm.designation}
+                                        value={profileForm.designation || ''}
                                         onChange={(e) => setProfileForm({ ...profileForm, designation: e.target.value })}
                                         placeholder="e.g. Administrative Officer IV"
                                         className="w-full text-xs px-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition disabled:bg-slate-50 disabled:text-slate-600 bg-white text-slate-800"
@@ -755,7 +847,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                         <input
                                             type="text"
                                             disabled
-                                            value={getRoleDisplayName(user?.role)}
+                                            value={getRoleDisplayName(user?.role) || ''}
                                             className="w-full text-xs pl-9 pr-3 py-2.5 border border-slate-200 bg-slate-50 text-slate-500 rounded-xl cursor-not-allowed font-medium"
                                         />
                                     </div>
@@ -786,7 +878,7 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                     <input
                                         type="text"
                                         disabled={!isEditingProfile}
-                                        value={profileForm.address}
+                                        value={profileForm.address || ''}
                                         onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
                                         placeholder="e.g. Digos City, Davao del Sur"
                                         className="w-full text-xs pl-9 pr-3 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none transition disabled:bg-slate-50 disabled:text-slate-600 bg-white text-slate-800"
@@ -1092,6 +1184,14 @@ export const MainLayout = ({ user, activeTab, onNavigate, onSelectPpmp, onLogout
                                             <span>Clear all</span>
                                         </button>
                                     )}
+                                    <button
+                                        type="button"
+                                        onClick={handleOpenAllNotifsDrawer}
+                                        className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition cursor-pointer"
+                                        title="Reload all notifications"
+                                    >
+                                        <RefreshCw className={`w-4 h-4 ${loadingAllNotifs ? 'animate-spin text-blue-400' : ''}`} />
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => setShowAllNotifsDrawer(false)}

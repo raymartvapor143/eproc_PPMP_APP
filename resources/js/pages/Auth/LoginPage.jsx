@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { SignaturePadModal } from '../../components/UI/SignaturePadModal';
 
-export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
+export const LoginPage = ({ onLoginSuccess, onOpenPrivacy, initialError = '' }) => {
     const [mode, setMode] = useState('login'); // 'login' or 'register'
     const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
     
@@ -43,8 +43,24 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
     const [password, setPassword] = useState('');
     const [showLoginPassword, setShowLoginPassword] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+    const [error, setError] = useState(initialError || '');
     const [successMsg, setSuccessMsg] = useState('');
+
+    useEffect(() => {
+        if (initialError) {
+            setError(initialError);
+        }
+    }, [initialError]);
+
+    useEffect(() => {
+        const handleDevToolsUnauthorized = (e) => {
+            if (e.detail?.message) {
+                setError(e.detail.message);
+            }
+        };
+        window.addEventListener('devtools:unauthorized', handleDevToolsUnauthorized);
+        return () => window.removeEventListener('devtools:unauthorized', handleDevToolsUnauthorized);
+    }, []);
 
     // Register state
     const [showRegisterPassword, setShowRegisterPassword] = useState(false);
@@ -983,6 +999,7 @@ export const LoginPage = ({ onLoginSuccess, onOpenPrivacy }) => {
                                                     <option value="budget_officer">Budget Officer</option>
                                                     <option value="oppmo">OPPMO Reviewer</option>
                                                     <option value="twg">BAC-TWG Reviewer</option>
+                                                    <option value="pacco">PACCO Reviewer (Provincial Accounting)</option>
                                                     <option value="admin">Administrator</option>
                                                 </select>
                                             </div>

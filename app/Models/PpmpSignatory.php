@@ -30,6 +30,11 @@ class PpmpSignatory extends Model
         return $query->where('signatory_type', 'budget_requirement');
     }
 
+    public function scopePaccoRequirement(Builder $query): Builder
+    {
+        return $query->where('signatory_type', 'pacco_requirement');
+    }
+
     public function scopeBacSecretariat(Builder $query): Builder
     {
         return $query->where('signatory_type', 'bac_secretariat');

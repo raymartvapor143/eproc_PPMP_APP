@@ -10,6 +10,10 @@ use App\Http\Controllers\Api\PpmpWorkflowController;
 use App\Http\Controllers\Api\SignatoryController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\OfficeController;
+use App\Http\Controllers\Api\FundSourceController;
+use App\Http\Controllers\Api\ProcurementConditionController;
+use App\Http\Controllers\Api\OtherTermController;
+use App\Http\Controllers\Api\SystemSettingController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -25,6 +29,7 @@ Route::prefix('api')->group(function () {
     Route::get('/public-offices', [OfficeController::class, 'index'])->middleware('throttle:60,1');
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/csrf-token', [AuthController::class, 'csrfToken'])->middleware('throttle:60,1');
+    Route::get('/system-settings/developer-mode', [SystemSettingController::class, 'getDeveloperMode'])->middleware('throttle:60,1');
 
     // Authenticated API routes (Protected by session authentication & API rate-limiting)
     Route::middleware(['auth', 'throttle:120,1'])->group(function () {
@@ -56,6 +61,27 @@ Route::prefix('api')->group(function () {
         Route::post('/signatories', [SignatoryController::class, 'store'])->middleware('role:super_admin');
         Route::put('/signatories/{id}', [SignatoryController::class, 'update'])->middleware('role:super_admin');
         Route::delete('/signatories/{id}', [SignatoryController::class, 'destroy'])->middleware('role:super_admin');
+
+        // System Settings (Super Admin only)
+        Route::put('/system-settings/developer-mode', [SystemSettingController::class, 'updateDeveloperMode'])->middleware('role:super_admin');
+
+        // Source of Fund Management (Public list for dropdowns, Admin & Super Admin CRUD)
+        Route::get('/fund-sources', [FundSourceController::class, 'index']);
+        Route::post('/fund-sources', [FundSourceController::class, 'store'])->middleware('role:admin,super_admin');
+        Route::put('/fund-sources/{id}', [FundSourceController::class, 'update'])->middleware('role:admin,super_admin');
+        Route::delete('/fund-sources/{id}', [FundSourceController::class, 'destroy'])->middleware('role:admin,super_admin');
+
+        // Procurement Conditions Management (Public list for PPMP form dropdowns, Admin & Super Admin CRUD)
+        Route::get('/procurement-conditions', [ProcurementConditionController::class, 'index']);
+        Route::post('/procurement-conditions', [ProcurementConditionController::class, 'store'])->middleware('role:admin,super_admin');
+        Route::put('/procurement-conditions/{id}', [ProcurementConditionController::class, 'update'])->middleware('role:admin,super_admin');
+        Route::delete('/procurement-conditions/{id}', [ProcurementConditionController::class, 'destroy'])->middleware('role:admin,super_admin');
+
+        // Other Terms & Green Specifications Management (Public list for PPMP form dropdowns, Admin & Super Admin CRUD)
+        Route::get('/other-terms', [OtherTermController::class, 'index']);
+        Route::post('/other-terms', [OtherTermController::class, 'store'])->middleware('role:admin,super_admin');
+        Route::put('/other-terms/{id}', [OtherTermController::class, 'update'])->middleware('role:admin,super_admin');
+        Route::delete('/other-terms/{id}', [OtherTermController::class, 'destroy'])->middleware('role:admin,super_admin');
 
         // Notifications & Utility
         Route::get('/notifications', [NotificationController::class, 'index']);
@@ -99,6 +125,12 @@ Route::prefix('api')->group(function () {
             ->middleware('role:budget_officer');
         Route::post('/ppmps/{uuid}/budget/return', [PpmpWorkflowController::class, 'budgetReturn'])
             ->middleware('role:budget_officer');
+
+        // 4b. PACCO Approval / Return (Trust Fund PPMPs)
+        Route::post('/ppmps/{uuid}/pacco/approve', [PpmpWorkflowController::class, 'paccoApprove'])
+            ->middleware('role:pacco');
+        Route::post('/ppmps/{uuid}/pacco/return', [PpmpWorkflowController::class, 'paccoReturn'])
+            ->middleware('role:pacco');
 
         // 5. OPPMO Approval / Return
         Route::post('/ppmps/{uuid}/oppmo/approve', [PpmpWorkflowController::class, 'oppmoApprove'])

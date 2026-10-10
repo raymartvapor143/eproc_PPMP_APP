@@ -351,7 +351,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                     <label className="block font-bold text-slate-700 mb-1">Fiscal Year (CY):</label>
                                     <input
                                         type="text"
-                                        value={fiscalYear}
+                                        value={fiscalYear || ''}
                                         onChange={(e) => setFiscalYear(e.target.value)}
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                                         placeholder="e.g. 2026"
@@ -360,7 +360,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                 <div>
                                     <label className="block font-bold text-slate-700 mb-1">Plan Version Type:</label>
                                     <select
-                                        value={planVersionType}
+                                        value={planVersionType || 'INDICATIVE'}
                                         onChange={(e) => setPlanVersionType(e.target.value)}
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"
                                     >
@@ -373,7 +373,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                     <label className="block font-bold text-slate-700 mb-1">Updated Version No. (if updated):</label>
                                     <input
                                         type="text"
-                                        value={updatedVersionNo}
+                                        value={updatedVersionNo || ''}
                                         onChange={(e) => setUpdatedVersionNo(e.target.value)}
                                         className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs"
                                         placeholder="e.g. 01, 02"
@@ -395,7 +395,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                         <label className="text-[10px] text-slate-500 block">Name</label>
                                         <input
                                             type="text"
-                                            value={preparedByName}
+                                            value={preparedByName || ''}
                                             onChange={(e) => setPreparedByName(e.target.value)}
                                             className="w-full px-2 py-1 border border-slate-300 rounded text-xs uppercase font-semibold"
                                         />
@@ -404,7 +404,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                         <label className="text-[10px] text-slate-500 block">Designation</label>
                                         <input
                                             type="text"
-                                            value={preparedByPosition}
+                                            value={preparedByPosition || ''}
                                             onChange={(e) => setPreparedByPosition(e.target.value)}
                                             className="w-full px-2 py-1 border border-slate-300 rounded text-xs"
                                         />
@@ -418,7 +418,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                         <label className="text-[10px] text-slate-500 block">Name</label>
                                         <input
                                             type="text"
-                                            value={recommendingName}
+                                            value={recommendingName || ''}
                                             onChange={(e) => setRecommendingName(e.target.value)}
                                             className="w-full px-2 py-1 border border-slate-300 rounded text-xs uppercase font-semibold"
                                         />
@@ -427,7 +427,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                         <label className="text-[10px] text-slate-500 block">Designation</label>
                                         <input
                                             type="text"
-                                            value={recommendingPosition}
+                                            value={recommendingPosition || ''}
                                             onChange={(e) => setRecommendingPosition(e.target.value)}
                                             className="w-full px-2 py-1 border border-slate-300 rounded text-xs"
                                         />
@@ -444,7 +444,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                         <label className="text-[10px] text-slate-500 block">Governor Name</label>
                                         <input
                                             type="text"
-                                            value={approvedByName}
+                                            value={approvedByName || ''}
                                             onChange={(e) => setApprovedByName(e.target.value)}
                                             className="w-full px-2 py-1 border border-emerald-300 rounded text-xs uppercase font-bold text-slate-900"
                                         />
@@ -453,7 +453,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                         <label className="text-[10px] text-slate-500 block">Official Designation</label>
                                         <input
                                             type="text"
-                                            value={approvedByPosition}
+                                            value={approvedByPosition || ''}
                                             onChange={(e) => setApprovedByPosition(e.target.value)}
                                             className="w-full px-2 py-1 border border-emerald-300 rounded text-xs"
                                         />
@@ -506,7 +506,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                                 <td className="border border-slate-200 p-1">
                                                     <textarea
                                                         rows={2}
-                                                        value={row.projectTitle}
+                                                        value={row.projectTitle || ''}
                                                         onChange={(e) => handleUpdateRow(idx, 'projectTitle', e.target.value)}
                                                         className="w-full p-1 border border-slate-200 rounded text-xs"
                                                     />
@@ -514,7 +514,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                                 <td className="border border-slate-200 p-1">
                                                     <input
                                                         type="text"
-                                                        value={row.endUser}
+                                                        value={row.endUser || ''}
                                                         onChange={(e) => handleUpdateRow(idx, 'endUser', e.target.value)}
                                                         className="w-full p-1 border border-slate-200 rounded text-xs"
                                                     />
@@ -522,7 +522,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                                 <td className="border border-slate-200 p-1">
                                                     <textarea
                                                         rows={2}
-                                                        value={row.generalDescription}
+                                                        value={row.generalDescription || ''}
                                                         onChange={(e) => handleUpdateRow(idx, 'generalDescription', e.target.value)}
                                                         className="w-full p-1 border border-slate-200 rounded text-xs"
                                                     />
@@ -530,14 +530,14 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                                 <td className="border border-slate-200 p-1">
                                                     <input
                                                         type="text"
-                                                        value={row.modeOfProcurement}
+                                                        value={row.modeOfProcurement || ''}
                                                         onChange={(e) => handleUpdateRow(idx, 'modeOfProcurement', e.target.value)}
                                                         className="w-full p-1 border border-slate-200 rounded text-xs"
                                                     />
                                                 </td>
                                                 <td className="border border-slate-200 p-1 text-center">
                                                     <select
-                                                        value={row.earlyProcurement}
+                                                        value={row.earlyProcurement || 'NO'}
                                                         onChange={(e) => handleUpdateRow(idx, 'earlyProcurement', e.target.value)}
                                                         className="p-1 border border-slate-200 rounded text-xs bg-white"
                                                     >
@@ -548,7 +548,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                                 <td className="border border-slate-200 p-1">
                                                     <input
                                                         type="text"
-                                                        value={row.criteria}
+                                                        value={row.criteria || ''}
                                                         onChange={(e) => handleUpdateRow(idx, 'criteria', e.target.value)}
                                                         className="w-full p-1 border border-slate-200 rounded text-xs text-center font-bold"
                                                     />
@@ -568,7 +568,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                                 <td className="border border-slate-200 p-1">
                                                     <input
                                                         type="text"
-                                                        value={row.sourceOfFund}
+                                                        value={row.sourceOfFund || ''}
                                                         onChange={(e) => handleUpdateRow(idx, 'sourceOfFund', e.target.value)}
                                                         className="w-full p-1 border border-slate-200 rounded text-xs"
                                                     />
@@ -577,7 +577,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                                     <input
                                                         type="number"
                                                         step="0.01"
-                                                        value={row.estimatedBudget}
+                                                        value={row.estimatedBudget ?? ''}
                                                         onChange={(e) => handleUpdateRow(idx, 'estimatedBudget', e.target.value)}
                                                         className="w-full p-1 border border-slate-200 rounded text-xs text-right font-mono"
                                                     />
@@ -585,7 +585,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
                                                 <td className="border border-slate-200 p-1">
                                                     <input
                                                         type="text"
-                                                        value={row.procurementStrategy}
+                                                        value={row.procurementStrategy || ''}
                                                         onChange={(e) => handleUpdateRow(idx, 'procurementStrategy', e.target.value)}
                                                         className="w-full p-1 border border-slate-200 rounded text-xs"
                                                     />

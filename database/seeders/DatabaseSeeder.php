@@ -39,7 +39,29 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
+        // Create or update default PACCO Reviewer account
+        User::updateOrCreate(
+            ['email' => 'pacco@system16.com'],
+            [
+                'name'         => 'MAY FERNANDO-UY, CPA',
+                'password'     => Hash::make('++admin@2026.davsur++'),
+                'role'         => 'pacco',
+                'designation'  => 'Provincial Accountant',
+                'is_active'    => true,
+                'approval_status' => 'approved',
+            ]
+        );
+
         // Create or update default official PPMP signatories
+        \App\Models\PpmpSignatory::updateOrCreate(
+            ['signatory_type' => 'pacco_requirement'],
+            [
+                'name' => 'MAY FERNANDO-UY, CPA',
+                'position' => 'Provincial Accountant',
+                'is_active' => true,
+            ]
+        );
+
         \App\Models\PpmpSignatory::firstOrCreate(
             ['signatory_type' => 'budget_requirement'],
             [

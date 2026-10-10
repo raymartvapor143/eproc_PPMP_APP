@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatDate, formatCurrency } from '../UI/StatusBadge';
 import { Printer, ArrowLeft, Clock, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
+import { getAccurateRouteRecipient, getAccurateRouteOrigin } from '../RoutingTimeline/RoutingTimeline';
 
 /**
  * PPMPRoutingPrintView:
@@ -157,6 +158,9 @@ export const PPMPRoutingPrintView = ({ ppmp, onBack }) => {
                                     const isReturned = route.status?.includes('RETURNED');
                                     const isApproved = route.status?.includes('APPROVED') || route.status === 'READY_TO_PRINT';
 
+                                    const originInfo = getAccurateRouteOrigin(route, ppmp);
+                                    const recipientInfo = getAccurateRouteRecipient(route, ppmp);
+
                                     return (
                                         <tr key={route.id || idx} className="border-b border-slate-900 hover:bg-slate-50/60 print:hover:bg-transparent">
                                             <td className="border border-slate-900 p-2 text-center font-mono font-bold text-slate-700">
@@ -174,28 +178,28 @@ export const PPMPRoutingPrintView = ({ ppmp, onBack }) => {
                                             </td>
                                             <td className="border border-slate-900 p-2">
                                                 <div className="font-bold text-slate-900">
-                                                    {route.from_user?.name || route.from_role}
+                                                    {originInfo.name}
                                                 </div>
-                                                {route.from_user?.designation && (
+                                                {originInfo.designation && (
                                                     <div className="text-[10px] text-slate-600">
-                                                        {route.from_user.designation}
+                                                        {originInfo.designation}
                                                     </div>
                                                 )}
                                                 <div className="text-[9px] font-mono text-slate-500 uppercase">
-                                                    Role: {route.from_role?.replace(/_/g, ' ')}
+                                                    Role: {originInfo.role?.replace(/_/g, ' ')}
                                                 </div>
                                             </td>
                                             <td className="border border-slate-900 p-2">
                                                 <div className="font-bold text-slate-900">
-                                                    {route.to_user?.name || route.to_role}
+                                                    {recipientInfo.name}
                                                 </div>
-                                                {route.to_user?.designation && (
+                                                {recipientInfo.designation && (
                                                     <div className="text-[10px] text-slate-600">
-                                                        {route.to_user.designation}
+                                                        {recipientInfo.designation}
                                                     </div>
                                                 )}
                                                 <div className="text-[9px] font-mono text-slate-500 uppercase">
-                                                    Role: {route.to_role?.replace(/_/g, ' ')}
+                                                    Role: {recipientInfo.role?.replace(/_/g, ' ')}
                                                 </div>
                                             </td>
                                             <td className="border border-slate-900 p-2 text-center font-mono text-[10px] text-slate-700">

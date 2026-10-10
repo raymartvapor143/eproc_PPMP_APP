@@ -29,6 +29,7 @@ export const ReviewPanel = ({
     const targetStageRole = (
         ppmp.status === 'HEAD_PENDING' ? 'head' :
         ppmp.status === 'BUDGET_OFFICER_REVIEW' ? 'budget_officer' :
+        ppmp.status === 'PACCO_REVIEW' ? 'pacco' :
         ppmp.status === 'OPPMO_REVIEW' ? 'oppmo' :
         ppmp.status === 'TWG_REVIEW' ? 'twg' : null
     );
@@ -43,6 +44,7 @@ export const ReviewPanel = ({
         targetStageRole && (
             ((userRole === 'head' || userRole === 'authorized_staff') && ppmp.status === 'HEAD_PENDING' && (user?.office_id === ppmp.office_id || !ppmp.office_id)) ||
             (userRole === 'budget_officer' && ppmp.status === 'BUDGET_OFFICER_REVIEW') ||
+            (userRole === 'pacco' && ppmp.status === 'PACCO_REVIEW') ||
             (userRole === 'oppmo' && ppmp.status === 'OPPMO_REVIEW') ||
             (userRole === 'twg' && ppmp.status === 'TWG_REVIEW') ||
             isAdmin
@@ -55,6 +57,8 @@ export const ReviewPanel = ({
             confirmText = 'Are you sure you want to APPROVE this PPMP? Official electronic signature indicator will be generated and the PPMP will be endorsed.';
         } else if (effectiveRole === 'budget_officer') {
             confirmText = 'Are you sure you want to certify budgetary requirements? Initial indicator will be affixed and this PPMP will automatically route to OPPMO.';
+        } else if (effectiveRole === 'pacco') {
+            confirmText = 'Are you sure you want to certify trust fund requirements? Initial indicator will be affixed and this PPMP will automatically route to OPPMO.';
         } else if (effectiveRole === 'oppmo') {
             confirmText = ppmp?.amendment_scope === 'PPMP_APP'
                 ? 'Are you sure you want to approve this PPMP? Initial indicator will be affixed and this PPMP will be finalized and marked READY TO PRINT.'
@@ -73,6 +77,8 @@ export const ReviewPanel = ({
                 await ppmpService.headApprove(ppmp.uuid);
             } else if (effectiveRole === 'budget_officer') {
                 await ppmpService.budgetApprove(ppmp.uuid);
+            } else if (effectiveRole === 'pacco') {
+                await ppmpService.paccoApprove(ppmp.uuid);
             } else if (effectiveRole === 'oppmo') {
                 await ppmpService.oppmoApprove(ppmp.uuid);
             } else if (effectiveRole === 'twg') {
@@ -80,6 +86,7 @@ export const ReviewPanel = ({
             }
 
             if (onActionCompleted) onActionCompleted();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (err) {
             setErrorMessage(err.response?.data?.message || 'Approval action failed.');
         } finally {
@@ -108,6 +115,8 @@ export const ReviewPanel = ({
                 await ppmpService.headReturn(ppmp.uuid, { remarks: remarks.trim() });
             } else if (effectiveRole === 'budget_officer') {
                 await ppmpService.budgetReturn(ppmp.uuid, payload);
+            } else if (effectiveRole === 'pacco') {
+                await ppmpService.paccoReturn(ppmp.uuid, payload);
             } else if (effectiveRole === 'oppmo') {
                 await ppmpService.oppmoReturn(ppmp.uuid, payload);
             } else if (effectiveRole === 'twg') {
@@ -117,6 +126,7 @@ export const ReviewPanel = ({
             setShowRemarksModal(false);
             setRemarks('');
             if (onActionCompleted) onActionCompleted();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (err) {
             setErrorMessage(err.response?.data?.message || 'Return action failed.');
         } finally {

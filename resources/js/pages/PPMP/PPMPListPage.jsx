@@ -33,6 +33,7 @@ export const PPMPListPage = ({ user, onSelectPpmp, onNavigate }) => {
         try {
             await ppmpService.receive(uuid);
             await fetchPpmps();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to mark document as received.');
         } finally {
@@ -73,6 +74,14 @@ export const PPMPListPage = ({ user, onSelectPpmp, onNavigate }) => {
     useEffect(() => {
         const timeout = setTimeout(fetchPpmps, 300);
         return () => clearTimeout(timeout);
+    }, [search, statusFilter, yearFilter, page, perPage]);
+
+    useEffect(() => {
+        const handleDataReload = () => {
+            fetchPpmps();
+        };
+        window.addEventListener('app:data_reload', handleDataReload);
+        return () => window.removeEventListener('app:data_reload', handleDataReload);
     }, [search, statusFilter, yearFilter, page, perPage]);
 
     return (

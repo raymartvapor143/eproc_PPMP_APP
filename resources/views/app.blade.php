@@ -12,7 +12,8 @@
 
     <script>
         window.App = {
-            user: @json(auth()->user() ? auth()->user()->load('office') : null)
+            user: @json(auth()->user() ? auth()->user()->load('office') : null),
+            developer_mode: @json(\App\Models\SystemSetting::isDeveloperMode())
         };
     </script>
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatusBadge, formatCurrency, formatDate } from '../../components/UI/StatusBadge';
 import { PPMPPrintView } from '../../components/PPMP/PPMPPrintView';
 import { PPMPAttachmentListView } from '../../components/PPMP/PPMPAttachmentListView';
@@ -48,6 +48,7 @@ export const PPMPDetailPage = ({
     const [receiving, setReceiving] = useState(false);
     const [isPrintView, setIsPrintView] = useState(false);
     const [isAttachmentListView, setIsAttachmentListView] = useState(false);
+    const [selectedAttachmentItemId, setSelectedAttachmentItemId] = useState(null);
     const [isAppView, setIsAppView] = useState(false);
     const [selectedAppPpmp, setSelectedAppPpmp] = useState(null);
     const [isRoutingPrintView, setIsRoutingPrintView] = useState(false);
@@ -164,17 +165,32 @@ export const PPMPDetailPage = ({
         return null;
     }, [ppmp, historicalPpmps]);
 
+    useEffect(() => {
+        const handleDataReload = (e) => {
+            if (!e.detail?.ppmpUuid || e.detail?.ppmpUuid === ppmp?.uuid) {
+                if (onReload) onReload();
+            }
+        };
+        window.addEventListener('app:data_reload', handleDataReload);
+        return () => window.removeEventListener('app:data_reload', handleDataReload);
+    }, [ppmp?.uuid, onReload]);
+
     const handleReceiveDocument = async () => {
         setReceiving(true);
         try {
             await ppmpService.receive(ppmp.uuid);
             onReload();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to receive document.');
         } finally {
             setReceiving(false);
         }
     };
+
+    const procurementItems = React.useMemo(() => {
+        return (ppmp?.items || []).filter(item => !item.is_header && item.description && item.description.trim() !== '');
+    }, [ppmp?.items]);
 
     const hasAttachmentList = Boolean(
         ppmp?.attachment_list_data ||
@@ -193,6 +209,7 @@ export const PPMPDetailPage = ({
     const isReviewerEditable = (
         ((user.role === 'head' || user.role === 'authorized_staff') && ['HEAD_PENDING', 'HEAD_APPROVED'].includes(ppmp.status) && user.office_id === ppmp.office_id) ||
         (user.role === 'budget_officer' && ppmp.status === 'BUDGET_OFFICER_REVIEW') ||
+        (user.role === 'pacco' && ppmp.status === 'PACCO_REVIEW') ||
         (user.role === 'oppmo' && ppmp.status === 'OPPMO_REVIEW') ||
         (user.role === 'twg' && ppmp.status === 'TWG_REVIEW')
     );
@@ -202,6 +219,7 @@ export const PPMPDetailPage = ({
     const canSubmitForReview = isCreator && (
         ppmp.status === 'HEAD_APPROVED' ||
         ppmp.status === 'BUDGET_OFFICER_RETURNED' ||
+        ppmp.status === 'PACCO_RETURNED' ||
         ppmp.status === 'OPPMO_RETURNED' ||
         ppmp.status === 'TWG_RETURNED'
     );
@@ -212,6 +230,7 @@ export const PPMPDetailPage = ({
         'HEAD_APPROVED',
         'HEAD_RETURNED',
         'BUDGET_OFFICER_RETURNED',
+        'PACCO_RETURNED',
         'OPPMO_RETURNED',
         'TWG_RETURNED'
     ].includes(ppmp.status)) || isReviewerEditable || ['admin', 'super_admin'].includes(user.role);
@@ -267,7 +286,11 @@ export const PPMPDetailPage = ({
                 ppmp={ppmp}
                 user={user}
                 canEdit={canEdit}
-                onBack={() => setIsAttachmentListView(false)}
+                initialItemId={selectedAttachmentItemId}
+                onBack={() => {
+                    setIsAttachmentListView(false);
+                    setSelectedAttachmentItemId(null);
+                }}
                 onGenerated={(updatedPpmp) => {
                     if (onReload) onReload();
                 }}
@@ -283,6 +306,7 @@ export const PPMPDetailPage = ({
         'HEAD_APPROVED',
         'HEAD_RETURNED',
         'BUDGET_OFFICER_RETURNED',
+        'PACCO_RETURNED',
         'OPPMO_RETURNED',
         'TWG_RETURNED'
     ].includes(ppmp.status)) || ['admin', 'super_admin'].includes(user.role);
@@ -293,6 +317,7 @@ export const PPMPDetailPage = ({
         try {
             await ppmpService.submitToHead(ppmp.uuid);
             onReload();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to submit to Office Head.');
         } finally {
@@ -300,11 +325,18 @@ export const PPMPDetailPage = ({
         }
     };
 
+    const isTrustFund = Boolean(
+        (ppmp?.source_of_fund && ppmp.source_of_fund.toLowerCase().includes('trust')) ||
+        ppmp?.items?.some(i => i.source_of_fund && i.source_of_fund.toLowerCase().includes('trust'))
+    );
+
     const getReviewTargetName = (status) => {
         if (ppmp?.amendment_scope === 'ATTACHMENT_LIST') {
             return 'the BAC-TWG';
         }
         switch (status) {
+            case 'PACCO_RETURNED':
+                return 'the PACCO Reviewer';
             case 'OPPMO_RETURNED':
                 return 'the OPPMO';
             case 'TWG_RETURNED':
@@ -313,7 +345,7 @@ export const PPMPDetailPage = ({
                 return 'the Provincial Budget Officer';
             case 'HEAD_APPROVED':
             default:
-                return 'the Provincial Budget Officer';
+                return isTrustFund ? 'the PACCO Reviewer' : 'the Provincial Budget Officer';
         }
     };
 
@@ -333,6 +365,7 @@ export const PPMPDetailPage = ({
         try {
             await ppmpService.submitForReview(ppmp.uuid);
             onReload();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to submit for review.');
         } finally {
@@ -393,6 +426,7 @@ export const PPMPDetailPage = ({
             alert(res.data.message || 'Request submitted successfully.');
             setIsAmendModalOpen(false);
             if (onReload) onReload();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (err) {
             setAmendError(err.response?.data?.message || 'Failed to submit request.');
         } finally {
@@ -416,6 +450,7 @@ export const PPMPDetailPage = ({
             } else if (onReload) {
                 onReload();
             }
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to approve request.');
         } finally {
@@ -437,6 +472,7 @@ export const PPMPDetailPage = ({
             setShowRejectModal(false);
             setRejectRemarks('');
             if (onReload) onReload();
+            window.dispatchEvent(new CustomEvent('notifications:reload'));
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to disapprove request.');
         } finally {
@@ -473,7 +509,7 @@ export const PPMPDetailPage = ({
                                 )}
                             </h1>
                             <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-300" title="Tracking Number">
-                                {ppmp.tracking_number || ppmp.ppmp_number}
+                                Tracker No.: {ppmp.tracking_number || ppmp.ppmp_number}
                             </span>
                             <StatusBadge status={ppmp.status} />
                             {ppmp.amendment_status === 'PENDING_APPROVAL' && (
@@ -537,6 +573,20 @@ export const PPMPDetailPage = ({
                                 <Printer className="w-4 h-4" />
                                 PRINT APP
                             </button>
+                            {hasAttachmentList && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedAttachmentItemId(null);
+                                        setIsAttachmentListView(true);
+                                    }}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm transition cursor-pointer"
+                                    title="Open and print PPMP List of Attachment"
+                                >
+                                    <Printer className="w-4 h-4" />
+                                    {procurementItems.length > 1 ? `PRINT ATTACHMENTS (${procurementItems.length})` : 'PRINT ATTACHMENT'}
+                                </button>
+                            )}
                         </>
                     )}
 
@@ -703,32 +753,36 @@ export const PPMPDetailPage = ({
                                         )}
                                     </button>
                                 )}
-                                <button
-                                    type="button"
-                                    disabled={approvingAmend}
-                                    onClick={handleApproveAmendment}
-                                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm transition cursor-pointer disabled:opacity-50"
-                                >
-                                    {approvingAmend ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            <span>Approving...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <CheckCircle className="w-4 h-4" />
-                                            <span>Approve Request</span>
-                                        </>
-                                    )}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setShowRejectModal(true)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm transition cursor-pointer"
-                                >
-                                    <X className="w-4 h-4" />
-                                    Disapprove
-                                </button>
+                                {Boolean(ppmp.admin_received_at) && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            disabled={approvingAmend}
+                                            onClick={handleApproveAmendment}
+                                            className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm transition cursor-pointer disabled:opacity-50"
+                                        >
+                                            {approvingAmend ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    <span>Approving...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <CheckCircle className="w-4 h-4" />
+                                                    <span>Approve Request</span>
+                                                </>
+                                            )}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowRejectModal(true)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm transition cursor-pointer"
+                                        >
+                                            <X className="w-4 h-4" />
+                                            Disapprove
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>
@@ -743,9 +797,14 @@ export const PPMPDetailPage = ({
                     <div className="bg-white rounded-xl border border-slate-200 shadow-xs p-6">
                         <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
                             <div>
-                                <span className="text-[11px] uppercase font-bold text-slate-500 tracking-wider">
-                                    Project Procurement Management Plan
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[11px] uppercase font-bold text-slate-500 tracking-wider">
+                                        Project Procurement Management Plan
+                                    </span>
+                                    <span className="text-[11px] font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                                        Tracker No.: {ppmp.tracking_number || ppmp.ppmp_number}
+                                    </span>
+                                </div>
                                 <h2 className="text-base font-extrabold text-slate-900 mt-0.5">
                                     {ppmp.title}
                                 </h2>
@@ -755,10 +814,20 @@ export const PPMPDetailPage = ({
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-xs">
                             <div>
                                 <span className="text-slate-500 block">Fiscal Year:</span>
                                 <span className="font-bold text-slate-900">CY {ppmp.fiscal_year}</span>
+                            </div>
+                            <div>
+                                <span className="text-slate-500 block">Source of Fund:</span>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold mt-0.5 ${
+                                    isTrustFund
+                                        ? 'bg-teal-100 text-teal-900 border border-teal-300'
+                                        : 'bg-blue-100 text-blue-900 border border-blue-300'
+                                }`}>
+                                    {ppmp.source_of_fund || 'General Fund'}
+                                </span>
                             </div>
                             <div>
                                 <span className="text-slate-500 block">Total Budget:</span>
@@ -1026,8 +1095,13 @@ export const PPMPDetailPage = ({
                                 <FileSpreadsheet className="w-4 h-4" />
                             </div>
                             <div>
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 flex items-center gap-1.5">
                                     PPMP List of Attachment
+                                    {procurementItems.length > 1 && (
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-mono font-semibold">
+                                            {procurementItems.length} Items
+                                        </span>
+                                    )}
                                 </h4>
                                 <p className="text-[11px] text-slate-500">
                                     Official Project Procurement Management Plan List standard form
@@ -1037,7 +1111,10 @@ export const PPMPDetailPage = ({
 
                         <button
                             type="button"
-                            onClick={() => setIsAttachmentListView(true)}
+                            onClick={() => {
+                                setSelectedAttachmentItemId(null);
+                                setIsAttachmentListView(true);
+                            }}
                             className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition shadow-sm cursor-pointer ${hasAttachmentList
                                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                                     : 'bg-indigo-600 hover:bg-indigo-700 text-white'
@@ -1045,8 +1122,49 @@ export const PPMPDetailPage = ({
                             title="Generate and view official Project Procurement Management Plan (PPMP) List attachment"
                         >
                             <FileSpreadsheet className="w-4 h-4" />
-                            {hasAttachmentList ? 'View PPMP List of Attachment' : 'Create PPMP List of Attachment'}
+                            {hasAttachmentList
+                                ? (procurementItems.length > 1 ? `View PPMP Lists of Attachment (${procurementItems.length})` : 'View PPMP List of Attachment')
+                                : (procurementItems.length > 1 ? `Create PPMP Lists of Attachment (${procurementItems.length})` : 'Create PPMP List of Attachment')
+                            }
                         </button>
+
+                        {/* If multiple procurement rows, display direct links for each item */}
+                        {procurementItems.length > 1 && (
+                            <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                                <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                                    Procurement Rows:
+                                </div>
+                                {procurementItems.map((item, idx) => {
+                                    const savedItem = ppmp?.attachment_list_data?.attachment_lists?.[String(item.id || idx)];
+                                    const isDone = Boolean(savedItem?.rows?.some(r => r.description || r.qty));
+                                    return (
+                                        <button
+                                            key={item.id || idx}
+                                            type="button"
+                                            onClick={() => {
+                                                setSelectedAttachmentItemId(item.id || idx);
+                                                setIsAttachmentListView(true);
+                                            }}
+                                            className="w-full text-left px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-indigo-50/70 border border-slate-200/80 hover:border-indigo-200 text-slate-700 hover:text-indigo-900 transition flex items-center justify-between text-xs cursor-pointer group"
+                                            title={`Open Attachment List for Row #${item.item_no || idx + 1}: ${item.description}`}
+                                        >
+                                            <div className="truncate flex-1 mr-2 flex items-center gap-1.5">
+                                                <span className="w-4 h-4 rounded-full bg-slate-200 group-hover:bg-indigo-200 text-slate-700 group-hover:text-indigo-800 text-[10px] font-bold flex items-center justify-center shrink-0">
+                                                    {idx + 1}
+                                                </span>
+                                                <span className="text-[11px] truncate font-medium">{item.description}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <span className="text-[10px] font-mono text-slate-500 group-hover:text-indigo-600">
+                                                    {formatCurrency(item.estimated_budget || 0)}
+                                                </span>
+                                                {isDone && <CheckCircle className="w-3 h-3 text-emerald-500" />}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                     {/* Create / Generate APP (Annual Procurement Plan) Button */}
@@ -1215,7 +1333,7 @@ export const PPMPDetailPage = ({
                                             PPMP No. {ppmp.ppmp_number}
                                         </span>
                                         <span className="font-mono text-xs font-semibold px-2 py-0.5 bg-slate-800 text-slate-300 rounded border border-slate-700" title="Tracking Number">
-                                            {ppmp.tracking_number || ppmp.ppmp_number}
+                                            Tracker No.: {ppmp.tracking_number || ppmp.ppmp_number}
                                         </span>
                                     </div>
                                     <p className="text-xs text-slate-400 mt-0.5 truncate max-w-2xl">
@@ -1297,6 +1415,11 @@ export const PPMPDetailPage = ({
                         {/* Modal Body: Complete Form Layout matching the Official Print Document */}
                         <div className="p-4 md:p-8 overflow-y-auto overflow-x-auto flex-1 bg-slate-200">
                             <div className="bg-white rounded-lg border border-slate-400 shadow-lg p-6 md:p-8 max-w-[1500px] mx-auto text-black">
+                                {/* Top-left Tracker No. */}
+                                <div className="text-xs font-mono font-bold text-slate-800 mb-1">
+                                    Tracker No.: <span className="font-bold text-black">{ppmp?.tracking_number || ppmp?.ppmp_number || '—'}</span>
+                                </div>
+
                                 {/* Official Header with Seal matching Print View */}
                                 <table className="w-full border-collapse mb-2">
                                     <tbody>
@@ -1424,7 +1547,7 @@ export const PPMPDetailPage = ({
                                                 : (selectedReviewPpmp.amendment_type === 'AMENDMENT' ? 'Amended Baseline' : 'Supplemental Baseline')}
                                         </span>
                                         <span className="font-mono text-xs text-slate-300 font-semibold px-2 py-0.5 bg-slate-800 rounded border border-slate-700">
-                                            ({selectedReviewPpmp.tracking_number})
+                                            Tracker No.: {selectedReviewPpmp.tracking_number || selectedReviewPpmp.ppmp_number}
                                         </span>
                                     </div>
                                     <p className="text-xs text-slate-400 mt-0.5 truncate max-w-2xl">
@@ -1477,6 +1600,11 @@ export const PPMPDetailPage = ({
                         {/* Modal Body: Complete Form Layout matching the Active PPMP Official Print / Modal Layout */}
                         <div className="p-4 md:p-8 overflow-y-auto overflow-x-auto flex-1 bg-slate-200">
                             <div className="bg-white rounded-lg border border-slate-400 shadow-lg p-6 md:p-8 max-w-[1500px] mx-auto text-black">
+                                {/* Top-left Tracker No. */}
+                                <div className="text-xs font-mono font-bold text-slate-800 mb-1">
+                                    Tracker No.: <span className="font-bold text-black">{selectedReviewPpmp?.tracking_number || selectedReviewPpmp?.ppmp_number || '—'}</span>
+                                </div>
+
                                 {/* Official Header with Seal matching Print View */}
                                 <table className="w-full border-collapse mb-2">
                                     <tbody>
@@ -1751,7 +1879,7 @@ export const PPMPDetailPage = ({
                                     <textarea
                                         rows={3}
                                         required
-                                        value={amendReason}
+                                        value={amendReason || ''}
                                         onChange={(e) => setAmendReason(e.target.value)}
                                         placeholder="State the official justification for this supplemental or amendment request..."
                                         className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition resize-none"
@@ -1853,7 +1981,7 @@ export const PPMPDetailPage = ({
                                 <textarea
                                     required
                                     rows={4}
-                                    value={rejectRemarks}
+                                    value={rejectRemarks || ''}
                                     onChange={(e) => setRejectRemarks(e.target.value)}
                                     placeholder="Enter disapproval remarks..."
                                     className="w-full text-xs p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:border-rose-500 outline-none resize-none"

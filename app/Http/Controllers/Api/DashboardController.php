@@ -34,13 +34,13 @@ class DashboardController extends Controller
                 'head_pending' => (clone $base)->where('status', 'HEAD_PENDING')->count(),
                 'head_returned' => (clone $base)->where('status', 'HEAD_RETURNED')->count(),
                 'ready_for_review' => (clone $base)->where('status', 'HEAD_APPROVED')->count(),
-                'in_review' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'OPPMO_REVIEW', 'TWG_REVIEW'])->count(),
-                'returned_by_reviewer' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_RETURNED', 'OPPMO_RETURNED', 'TWG_RETURNED'])->count(),
+                'in_review' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'PACCO_REVIEW', 'OPPMO_REVIEW', 'TWG_REVIEW'])->count(),
+                'returned_by_reviewer' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_RETURNED', 'PACCO_RETURNED', 'OPPMO_RETURNED', 'TWG_RETURNED'])->count(),
                 'ready_to_print' => (clone $base)->where('status', 'READY_TO_PRINT')->count(),
                 'total' => (clone $base)->count(),
             ];
 
-            $recentPpmps = (clone $base)->with(['office', 'signatures'])->latest('updated_at')->take(100)->get();
+            $recentPpmps = (clone $base)->with(['office', 'signatures', 'items'])->latest('updated_at')->take(100)->get();
 
         } elseif ($user->isHead()) {
             $base = Ppmp::where('office_id', $user->office_id)->whereDoesntHave('children');
@@ -99,6 +99,23 @@ class DashboardController extends Controller
                 ->take(100)
                 ->get();
 
+        } elseif ($user->isPacco()) {
+            $base = Ppmp::whereDoesntHave('children');
+
+            $metrics = [
+                'pending_review' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'OPPMO_REVIEW', 'TWG_REVIEW', 'HEAD_APPROVED'])->count(),
+                'returned' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_RETURNED', 'OPPMO_RETURNED', 'TWG_RETURNED'])->count(),
+                'approved' => (clone $base)->where('status', 'READY_TO_PRINT')->count(),
+                'ready_to_print' => (clone $base)->where('status', 'READY_TO_PRINT')->count(),
+                'total_review' => (clone $base)->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'])->count(),
+            ];
+
+            $recentPpmps = (clone $base)->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'])
+                ->with(['office', 'creator', 'signatures'])
+                ->latest('updated_at')
+                ->take(100)
+                ->get();
+
         } elseif ($user->isSuperAdmin()) {
             // Super Admin: Full Executive Overview & Analytics
             $base = Ppmp::whereDoesntHave('children');
@@ -108,7 +125,7 @@ class DashboardController extends Controller
                 'total_budget' => (float) ((clone $base)->sum('total_budget') ?? 0),
                 'draft' => (clone $base)->where('status', 'DRAFT')->count(),
                 'head_pending' => (clone $base)->where('status', 'HEAD_PENDING')->count(),
-                'in_review' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'OPPMO_REVIEW', 'TWG_REVIEW'])->count(),
+                'in_review' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'PACCO_REVIEW', 'OPPMO_REVIEW', 'TWG_REVIEW'])->count(),
                 'ready_to_print' => (clone $base)->where('status', 'READY_TO_PRINT')->count(),
                 'pending_amendments' => Ppmp::where('amendment_status', 'PENDING_APPROVAL')->count(),
             ];
@@ -154,7 +171,7 @@ class DashboardController extends Controller
             $statusDistribution = [
                 ['status' => 'DRAFT', 'label' => 'Drafts', 'count' => $metrics['draft'], 'color' => '#64748b'],
                 ['status' => 'HEAD_PENDING', 'label' => 'Pending Office Head', 'count' => $metrics['head_pending'], 'color' => '#f59e0b'],
-                ['status' => 'IN_REVIEW', 'label' => 'Under Review (PBO/OPPMO/TWG)', 'count' => $metrics['in_review'], 'color' => '#6366f1'],
+                ['status' => 'IN_REVIEW', 'label' => 'Under Review (PBO/PACCO/OPPMO/TWG)', 'count' => $metrics['in_review'], 'color' => '#6366f1'],
                 ['status' => 'READY_TO_PRINT', 'label' => 'Ready to Print / Approved', 'count' => $metrics['ready_to_print'], 'color' => '#10b981'],
                 ['status' => 'PENDING_AMENDMENTS', 'label' => 'Pending Amendments', 'count' => $metrics['pending_amendments'], 'color' => '#a855f7'],
             ];
@@ -173,7 +190,7 @@ class DashboardController extends Controller
                 'total_budget' => (float) ((clone $base)->sum('total_budget') ?? 0),
                 'draft' => (clone $base)->where('status', 'DRAFT')->count(),
                 'head_pending' => (clone $base)->where('status', 'HEAD_PENDING')->count(),
-                'in_review' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'OPPMO_REVIEW', 'TWG_REVIEW'])->count(),
+                'in_review' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'PACCO_REVIEW', 'OPPMO_REVIEW', 'TWG_REVIEW'])->count(),
                 'ready_to_print' => (clone $base)->where('status', 'READY_TO_PRINT')->count(),
                 'pending_amendments' => Ppmp::where('amendment_status', 'PENDING_APPROVAL')->count(),
                 'total_amendments' => Ppmp::whereNotNull('amendment_status')->count(),

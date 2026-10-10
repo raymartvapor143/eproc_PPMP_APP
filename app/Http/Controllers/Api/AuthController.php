@@ -49,7 +49,8 @@ class AuthController extends Controller
             ], 429);
         }
 
-        $user = User::where('email', $request->email)->first();
+        $cleanEmail = trim(strtolower($request->email));
+        $user = User::whereRaw('LOWER(email) = ?', [$cleanEmail])->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             // Increment failed attempt counter (decay in 60 seconds / 1 minute)
@@ -107,7 +108,7 @@ class AuthController extends Controller
         $rules = [
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
-            'role' => 'required|string|in:end_user,head,budget_officer,oppmo,twg,authorized_staff',
+            'role' => 'required|string|in:end_user,head,budget_officer,oppmo,twg,authorized_staff,pacco',
             'phone_number' => 'required|string|max:30',
             'address' => 'required|string|max:500',
             'password' => 'required|string|min:6|confirmed',

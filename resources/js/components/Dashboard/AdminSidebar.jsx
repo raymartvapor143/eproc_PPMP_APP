@@ -9,6 +9,10 @@ import {
     ChevronRight,
     TrendingUp,
     Activity,
+    Landmark,
+    Truck,
+    Leaf,
+    Sliders,
 } from 'lucide-react';
 
 export const AdminSidebar = ({ activeSection, onSelectSection, metrics, pendingUsersCount }) => {
@@ -44,6 +48,27 @@ export const AdminSidebar = ({ activeSection, onSelectSection, metrics, pendingU
             description: 'Masterlist & CSV Import',
         },
         {
+            id: 'fund_sources',
+            label: 'Sources of Fund',
+            icon: Landmark,
+            badge: null,
+            description: 'Review Routes & Funds',
+        },
+        {
+            id: 'conditions',
+            label: 'Delivery Conditions',
+            icon: Truck,
+            badge: null,
+            description: 'Delivery & Payment Terms',
+        },
+        {
+            id: 'other_terms',
+            label: 'Other Terms & Specs',
+            icon: Leaf,
+            badge: null,
+            description: 'Green Specs & Custom Terms',
+        },
+        {
             id: 'users',
             label: 'User Accounts',
             icon: Users,
@@ -57,6 +82,14 @@ export const AdminSidebar = ({ activeSection, onSelectSection, metrics, pendingU
             icon: Shield,
             badge: null,
             description: 'Governor & Reviewers',
+        },
+        {
+            id: 'settings',
+            label: 'Security & Dev Mode',
+            icon: Sliders,
+            badge: null,
+            badgeColor: 'bg-amber-100 text-amber-800',
+            description: 'Developer Mode Control',
         },
         {
             id: 'logs',

@@ -30,7 +30,7 @@ class SignatoryController extends Controller
         }
 
         $validated = $request->validate([
-            'signatory_type' => 'required|in:budget_requirement,bac_secretariat,approved_by',
+            'signatory_type' => 'required|in:budget_requirement,pacco_requirement,bac_secretariat,approved_by',
             'name' => 'required|string|max:255',
             'position' => 'required|string|max:255',
             'is_active' => 'nullable|boolean',

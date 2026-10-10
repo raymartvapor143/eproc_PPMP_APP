@@ -19,6 +19,7 @@ return new class extends Migration
             $table->foreignId('office_id')->constrained('offices')->cascadeOnDelete();
             $table->foreignId('created_by')->constrained('users')->cascadeOnDelete();
             $table->string('title');
+            $table->string('source_of_fund')->nullable()->default('General Fund');
             $table->string('fiscal_year', 10);
             $table->enum('plan_type', ['INDICATIVE', 'FINAL'])->default('INDICATIVE');
             $table->string('delivery_period')->nullable();
@@ -36,6 +37,9 @@ return new class extends Migration
                 'BUDGET_OFFICER_REVIEW',
                 'BUDGET_OFFICER_RETURNED',
                 'BUDGET_OFFICER_APPROVED',
+                'PACCO_REVIEW',
+                'PACCO_RETURNED',
+                'PACCO_APPROVED',
                 'OPPMO_REVIEW',
                 'OPPMO_RETURNED',
                 'OPPMO_APPROVED',
@@ -54,6 +58,8 @@ return new class extends Migration
             $table->timestamp('review_submitted_at')->nullable();
             $table->timestamp('budget_received_at')->nullable();
             $table->timestamp('budget_approved_at')->nullable();
+            $table->timestamp('pacco_received_at')->nullable();
+            $table->timestamp('pacco_approved_at')->nullable();
             $table->timestamp('oppmo_received_at')->nullable();
             $table->timestamp('oppmo_approved_at')->nullable();
             $table->timestamp('twg_received_at')->nullable();

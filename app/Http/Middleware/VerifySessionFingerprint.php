@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\AuditLog;
+use App\Models\SystemSetting;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -24,10 +25,20 @@ class VerifySessionFingerprint
             if (!$session->has('_client_fingerprint')) {
                 // Initialize fingerprint if not present
                 $session->put('_client_fingerprint', $currentFingerprint);
+                $session->put('_client_user_agent_preview', $request->userAgent());
             } else {
                 $storedFingerprint = $session->get('_client_fingerprint');
 
                 if (!hash_equals($storedFingerprint, $currentFingerprint)) {
+                    // When Developer Mode is ENABLED, developers and super admins are actively inspecting,
+                    // using DevTools, testing responsive mobile viewports, or simulating devices.
+                    // Adapt the session fingerprint to the current developer agent instead of kicking the user out.
+                    if (SystemSetting::isDeveloperMode()) {
+                        $session->put('_client_fingerprint', $currentFingerprint);
+                        $session->put('_client_user_agent_preview', $request->userAgent());
+                        return $next($request);
+                    }
+
                     $user = Auth::user();
 
                     // Suspicious user-agent change detected: potential stolen cookie / session hijacking

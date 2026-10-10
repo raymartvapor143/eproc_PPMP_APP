@@ -64,6 +64,27 @@ export const getStatusConfig = (status) => {
                 dot: 'bg-rose-500',
                 desc: 'Returned by Budget Officer. Remarks need compliance.',
             };
+        case 'PACCO_REVIEW':
+            return {
+                label: 'PACCO Review',
+                bg: 'bg-teal-100 text-teal-800 border-teal-300',
+                dot: 'bg-teal-500 animate-pulse',
+                desc: 'Awaiting Trust Fund verification and certification from PACCO.',
+            };
+        case 'PACCO_RETURNED':
+            return {
+                label: 'Returned by PACCO',
+                bg: 'bg-rose-100 text-rose-800 border-rose-300',
+                dot: 'bg-rose-500',
+                desc: 'Returned by PACCO Reviewer. Remarks need compliance.',
+            };
+        case 'PACCO_APPROVED':
+            return {
+                label: 'PACCO Approved',
+                bg: 'bg-teal-100 text-teal-800 border-teal-300',
+                dot: 'bg-teal-500',
+                desc: 'Trust Fund requirements certified by PACCO.',
+            };
         case 'OPPMO_REVIEW':
             return {
                 label: 'OPPMO Review',

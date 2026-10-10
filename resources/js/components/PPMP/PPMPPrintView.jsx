@@ -43,6 +43,20 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
         ? (signatures.find(s => s.role === 'head') || (isScopeAttachmentOnly ? ppmp?.parent?.signatures?.find(s => s.role === 'head') : null))
         : null;
 
+    const isTrustFund = Boolean(
+        (ppmp?.source_of_fund && ppmp.source_of_fund.toLowerCase().includes('trust')) ||
+        ppmp?.items?.some(i => i.source_of_fund && i.source_of_fund.toLowerCase().includes('trust'))
+    );
+    const hasPaccoApproved = Boolean(
+        ppmp?.pacco_approved_at ||
+        ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
+    );
+    const paccoSig = isTrustFund
+        ? (isScopeAttachmentOnly
+            ? (signatures.find(s => s.role === 'pacco') || ppmp?.parent?.signatures?.find(s => s.role === 'pacco') || null)
+            : (hasPaccoApproved ? signatures.find(s => s.role === 'pacco') : null))
+        : null;
+
     const budgetSig = isScopeAttachmentOnly
         ? (signatures.find(s => s.role === 'budget_officer') || ppmp?.parent?.signatures?.find(s => s.role === 'budget_officer') || null)
         : (hasBudgetApproved ? signatures.find(s => s.role === 'budget_officer') : null);
@@ -118,6 +132,11 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
 
             {/* Exact PDF Layout Container - Zero margin & full width on print */}
             <div className="p-4 sm:p-8 max-w-[1550px] mx-auto text-black bg-white print:p-3 print:m-0 print:max-w-none print:w-full">
+                {/* Top-left Tracker No. */}
+                <div className="text-xs font-mono font-bold text-slate-800 print:text-black mb-1">
+                    Tracker No.: <span className="font-bold text-black">{ppmp?.tracking_number || ppmp?.ppmp_number || '—'}</span>
+                </div>
+
                 {/* Header Grid matching PDF */}
                 <table className="w-full border-collapse mb-1">
                     <tbody>
@@ -362,34 +381,67 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
                             <td colSpan={2} className="py-1 print:py-0.5"></td>
                         </tr>
 
-                        {/* Bottom row: Reviewed as to Budgetary Requirement & Reviewed by BAC-Secretariat */}
+                        {/* Bottom row: Reviewed as to Budgetary Requirement (General Fund OR Trust Fund by PACCO) & Reviewed by BAC-Secretariat */}
                         <tr>
                             <td className="w-1/2 p-1 align-top pt-1 print:pt-0.5">
-                                <div className="font-bold text-[9px] mb-1">Reviewed as to Budgetary Requirement</div>
+                                <div className="font-bold text-[9px] mb-1">
+                                    Reviewed as to Budgetary Requirement
+                                </div>
                                 <div className="text-center flex flex-col items-center justify-end">
-                                    <div className="relative inline-flex items-center justify-center">
-                                        <div className="font-bold text-xs uppercase underline text-center">
-                                            {ppmp?.default_signatories?.budget_requirement?.name || 'DESSAMIE BUAT-SANCHEZ, CPA, JD'}
-                                        </div>
-                                        {budgetSig?.user?.signature_path && (
-                                            <img
-                                                src={`/api/users/${budgetSig.user.id}/signature`}
-                                                alt="Initial Signature"
-                                                className="h-7 max-w-[65px] object-contain absolute left-full ml-1.5 bottom-0 pointer-events-none"
-                                            />
-                                        )}
-                                    </div>
-                                    <div className="text-[9px] uppercase mt-0.5">
-                                        {ppmp?.default_signatories?.budget_requirement?.position || 'PGDH - PBO / BAC - Chairman'}
-                                    </div>
-                                    {budgetSig ? (
-                                        <div className="text-[8px] font-mono text-slate-600">
-                                            [{budgetSig.signature_indicator}] • {formatDate(budgetSig.signed_at)}
-                                        </div>
+                                    {isTrustFund ? (
+                                        <>
+                                            <div className="relative inline-flex items-center justify-center">
+                                                <div className="font-bold text-xs uppercase underline text-center">
+                                                    {ppmp?.default_signatories?.pacco_requirement?.name || (paccoSig?.signer_name && paccoSig.signer_name !== 'PACCO Reviewer' ? paccoSig.signer_name : 'MAY FERNANDO-UY, CPA')}
+                                                </div>
+                                                {paccoSig?.user?.signature_path && (
+                                                    <img
+                                                        src={`/api/users/${paccoSig.user.id}/signature`}
+                                                        alt="Initial Signature"
+                                                        className="h-7 max-w-[65px] object-contain absolute left-full ml-1.5 bottom-0 pointer-events-none"
+                                                    />
+                                                )}
+                                            </div>
+                                            <div className="text-[9px] uppercase mt-0.5">
+                                                {ppmp?.default_signatories?.pacco_requirement?.position || (paccoSig?.signer_designation && paccoSig.signer_designation !== 'Provincial Accounting Reviewer' ? paccoSig.signer_designation : 'Provincial Accountant')}
+                                            </div>
+                                            {paccoSig ? (
+                                                <div className="text-[8px] font-mono text-slate-600">
+                                                    [{paccoSig.signature_indicator}] • {formatDate(paccoSig.signed_at)}
+                                                </div>
+                                            ) : (
+                                                <div className="text-[8px] text-slate-400 italic">
+                                                     Awaiting Certification
+                                                 </div>
+                                            )}
+                                        </>
                                     ) : (
-                                        <div className="text-[8px] text-slate-400 italic">
-                                             Awaiting Certification
-                                         </div>
+                                        <>
+                                            <div className="relative inline-flex items-center justify-center">
+                                                <div className="font-bold text-xs uppercase underline text-center">
+                                                    {ppmp?.default_signatories?.budget_requirement?.name || 'DESSAMIE BUAT-SANCHEZ, CPA, JD'}
+                                                </div>
+                                                {budgetSig?.user?.signature_path && (
+                                                    <img
+                                                        src={`/api/users/${budgetSig.user.id}/signature`}
+                                                        alt="Initial Signature"
+                                                        className="h-7 max-w-[65px] object-contain absolute left-full ml-1.5 bottom-0 pointer-events-none"
+                                                    />
+                                                )}
+                                            </div>
+                                            <div className="text-[9px] uppercase mt-0.5">
+                                                {ppmp?.default_signatories?.budget_requirement?.position || 'PGDH - PBO / BAC - Chairman'}
+                                            </div>
+                                            {budgetSig ? (
+                                                <div className="text-[8px] font-mono text-slate-600">
+                                                    [{budgetSig.signature_indicator}] • {formatDate(budgetSig.signed_at)}
+                                                </div>
+                                            ) : (
+                                                <div className="text-[8px] text-slate-400 italic">
+                                                     Awaiting Certification
+                                                 </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             </td>

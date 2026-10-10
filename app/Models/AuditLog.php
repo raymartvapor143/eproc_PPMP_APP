@@ -90,6 +90,13 @@ class AuditLog extends Model
             'OFFICE_UPDATED'             => "Admin updated an office",
             'OFFICE_DELETED'             => "Admin deleted an office",
             'OFFICES_IMPORTED'           => "Admin imported offices from CSV/Excel",
+            'FUND_SOURCE_CREATED'        => "Admin created a new source of fund",
+            'FUND_SOURCE_UPDATED'        => "Admin updated a source of fund",
+            'FUND_SOURCE_DELETED'        => "Admin deleted a source of fund",
+            'CONDITION_CREATED'          => "Admin created a new procurement condition",
+            'CONDITION_UPDATED'          => "Admin updated a procurement condition",
+            'CONDITION_DELETED'          => "Admin deleted a procurement condition",
+            'DEVELOPER_MODE_TOGGLED'     => "Super Admin modified Developer Mode setting",
         ];
 
         return $map[$this->action] ?? ucwords(str_replace('_', ' ', strtolower($this->action)));
@@ -112,7 +119,7 @@ class AuditLog extends Model
         if (str_starts_with($action, 'AMENDMENT_')) {
             return 'amendment';
         }
-        if (in_array($action, ['SIGNATORY_CREATED', 'SIGNATORY_UPDATED', 'SIGNATORY_DELETED', 'OFFICE_CREATED', 'OFFICE_UPDATED', 'OFFICE_DELETED', 'OFFICES_IMPORTED'])) {
+        if (in_array($action, ['SIGNATORY_CREATED', 'SIGNATORY_UPDATED', 'SIGNATORY_DELETED', 'OFFICE_CREATED', 'OFFICE_UPDATED', 'OFFICE_DELETED', 'OFFICES_IMPORTED', 'FUND_SOURCE_CREATED', 'FUND_SOURCE_UPDATED', 'FUND_SOURCE_DELETED', 'CONDITION_CREATED', 'CONDITION_UPDATED', 'CONDITION_DELETED', 'DEVELOPER_MODE_TOGGLED'])) {
             return 'admin';
         }
         if (in_array($action, ['USER_APPROVED', 'USER_REJECTED', 'USER_DEACTIVATED', 'USER_ACTIVATED', 'USER_PASSWORD_RESET', 'USER_PROFILE_UPDATED'])) {

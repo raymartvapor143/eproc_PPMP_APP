@@ -2,6 +2,129 @@ import React, { useState } from 'react';
 import { formatDate } from '../UI/StatusBadge';
 import { Clock, ExternalLink, X, ChevronRight, History, Printer } from 'lucide-react';
 
+/**
+ * Returns accurate recipient / next office information strictly following the official PPMP route flow:
+ * 1. End User -> Office Head (head)
+ * 2. Office Head -> PACCO Reviewer (pacco) [Trust Fund] OR Provincial Budget Officer (budget_officer) [General Fund] OR BAC-TWG (twg) [Attachment Only]
+ * 3. PACCO / Budget Officer -> OPPMO (oppmo)
+ * 4. OPPMO -> BAC-TWG (twg) [or End User if PPMP_APP only]
+ * 5. BAC-TWG -> Implementing Unit / End User (end_user) [Ready to Print / Final Approval]
+ */
+export const getAccurateRouteRecipient = (route, ppmp) => {
+    if (!route) return { name: '—', role: '', designation: '' };
+
+    const action = route.action || '';
+    const isTrust = Boolean(
+        ppmp?.source_of_fund?.toLowerCase()?.includes('trust') ||
+        ppmp?.items?.some(i => i.source_of_fund?.toLowerCase()?.includes('trust'))
+    );
+    const isAttachOnly = ppmp?.amendment_scope === 'ATTACHMENT_LIST';
+    const isPpmpAppOnly = ppmp?.amendment_scope === 'PPMP_APP';
+
+    // Desk receipt steps or self-referential steps: determine next office in route flow
+    if (action === 'PACCO_RECEIVED' || action === 'BUDGET_RECEIVED') {
+        return {
+            name: 'OPPMO REVIEW',
+            role: 'oppmo',
+            designation: 'Provincial Procurement Management Office',
+        };
+    }
+
+    if (action === 'OPPMO_RECEIVED') {
+        if (isPpmpAppOnly) {
+            return {
+                name: ppmp?.creator?.name || 'Implementing Unit / End User',
+                role: 'end_user',
+                designation: ppmp?.creator?.designation || 'End User (Implementing Unit)',
+            };
+        }
+        return {
+            name: 'BAC-TWG',
+            role: 'twg',
+            designation: 'Bids and Awards Committee - Technical Working Group',
+        };
+    }
+
+    if (action === 'HEAD_RECEIVED' || action === 'HEAD_APPROVED') {
+        if (isAttachOnly) {
+            return {
+                name: 'BAC-TWG',
+                role: 'twg',
+                designation: 'Bids and Awards Committee - Technical Working Group',
+            };
+        }
+        if (isTrust) {
+            return {
+                name: ppmp?.default_signatories?.pacco_requirement?.name || 'MAY FERNANDO-UY, CPA',
+                role: 'pacco',
+                designation: ppmp?.default_signatories?.pacco_requirement?.position || 'Provincial Accountant (PACCO Review)',
+            };
+        }
+        return {
+            name: ppmp?.default_signatories?.budget_requirement?.name || 'Provincial Budget Officer',
+            role: 'budget_officer',
+            designation: ppmp?.default_signatories?.budget_requirement?.position || 'Provincial Budget Office',
+        };
+    }
+
+    if (action === 'TWG_RECEIVED') {
+        return {
+            name: ppmp?.creator?.name || 'Implementing Unit / End User',
+            role: 'end_user',
+            designation: ppmp?.creator?.designation || 'End User (Implementing Unit - Technical Clearance)',
+        };
+    }
+
+    if (action === 'ADMIN_RECEIVED_REQUEST') {
+        return {
+            name: ppmp?.creator?.name || 'Implementing Unit / End User',
+            role: 'end_user',
+            designation: 'Implementing Unit (Administrative Review)',
+        };
+    }
+
+    if (action === 'DRAFT_CREATED') {
+        return {
+            name: ppmp?.office?.head?.name || 'Office Head',
+            role: 'head',
+            designation: ppmp?.office?.head?.designation || 'Office Head / Implementing Unit Head',
+        };
+    }
+
+    if (route.to_role === 'pacco') {
+        return {
+            name: (route.to_user?.name && route.to_user.name !== 'PACCO Reviewer') ? route.to_user.name : (ppmp?.default_signatories?.pacco_requirement?.name || 'MAY FERNANDO-UY, CPA'),
+            role: 'pacco',
+            designation: (route.to_user?.designation && route.to_user.designation !== 'Provincial Accounting Reviewer') ? route.to_user.designation : (ppmp?.default_signatories?.pacco_requirement?.position || 'Provincial Accountant'),
+        };
+    }
+
+    // Default: use to_user or to_role
+    return {
+        name: route.to_user?.name || (route.to_role ? route.to_role.replace(/_/g, ' ').toUpperCase() : '—'),
+        role: route.to_role,
+        designation: route.to_user?.designation || (route.to_role ? `Role: ${route.to_role.replace(/_/g, ' ')}` : ''),
+    };
+};
+
+export const getAccurateRouteOrigin = (route, ppmp) => {
+    if (!route) return { name: '—', role: '', designation: '' };
+
+    if (route.from_role === 'pacco') {
+        return {
+            name: (route.from_user?.name && route.from_user.name !== 'PACCO Reviewer') ? route.from_user.name : (ppmp?.default_signatories?.pacco_requirement?.name || 'MAY FERNANDO-UY, CPA'),
+            role: 'pacco',
+            designation: (route.from_user?.designation && route.from_user.designation !== 'Provincial Accounting Reviewer') ? route.from_user.designation : (ppmp?.default_signatories?.pacco_requirement?.position || 'Provincial Accountant'),
+        };
+    }
+
+    return {
+        name: route.from_user?.name || (route.from_role ? route.from_role.replace(/_/g, ' ').toUpperCase() : '—'),
+        role: route.from_role,
+        designation: route.from_user?.designation || (route.from_role ? `Role: ${route.from_role.replace(/_/g, ' ')}` : ''),
+    };
+};
+
 export const RoutingTimeline = ({
     routes = [],
     reviews = [],
@@ -84,18 +207,25 @@ export const RoutingTimeline = ({
                 </div>
 
                 {latestRoute ? (
-                    <div className="mt-3 text-xs text-slate-600">
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
-                            <span className="font-semibold uppercase tracking-wider text-slate-700">Latest Event</span>
-                            <span>{formatDate(latestRoute.acted_at || latestRoute.submitted_at)}</span>
-                        </div>
-                        <div className="p-2.5 bg-slate-50 rounded border border-slate-200 font-medium text-slate-800 flex items-center justify-between">
-                            <span className="truncate">{latestRoute.action.replace(/_/g, ' ')}</span>
-                            <span className="text-[10px] text-slate-500 shrink-0 font-mono ml-2">
-                                {latestRoute.from_role} → {latestRoute.to_role}
-                            </span>
-                        </div>
-                    </div>
+                    (() => {
+                        const latestOrigin = getAccurateRouteOrigin(latestRoute, activeSelectedPpmp);
+                        const latestRecipient = getAccurateRouteRecipient(latestRoute, activeSelectedPpmp);
+
+                        return (
+                            <div className="mt-3 text-xs text-slate-600">
+                                <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+                                    <span className="font-semibold uppercase tracking-wider text-slate-700">Latest Event</span>
+                                    <span>{formatDate(latestRoute.acted_at || latestRoute.submitted_at)}</span>
+                                </div>
+                                <div className="p-2.5 bg-slate-50 rounded border border-slate-200 font-medium text-slate-800 flex items-center justify-between">
+                                    <span className="truncate">{latestRoute.action.replace(/_/g, ' ')}</span>
+                                    <span className="text-[10px] text-slate-500 shrink-0 font-mono ml-2">
+                                        {latestOrigin.role || latestRoute.from_role} → {latestRecipient.role || latestRoute.to_role}
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })()
                 ) : (
                     <div className="mt-3 text-xs text-slate-400 italic">
                         No routing actions recorded yet.
@@ -348,64 +478,70 @@ export const RoutingTimeline = ({
                                                     </div>
 
                                                     {/* Routing Flow / Custody movement */}
-                                                    <div className="mt-2.5 p-2 bg-slate-50/80 rounded-lg border border-slate-200/80 flex items-center justify-between gap-2 text-xs">
-                                                        <div className="truncate">
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Origin / Handled By</span>
-                                                            <span className="font-semibold text-slate-900 truncate block">
-                                                                {route.from_user?.name || route.from_role?.replace(/_/g, ' ')}
-                                                            </span>
-                                                            <span className="text-[10px] text-slate-500 block truncate">
-                                                                {route.from_user?.designation || `Role: ${route.from_role?.replace(/_/g, ' ')}`}
-                                                            </span>
-                                                        </div>
-                                                        <span className="text-slate-400 font-bold px-1.5">→</span>
-                                                        <div className="text-right truncate">
-                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Recipient / Next Office</span>
-                                                            <span className="font-semibold text-slate-900 truncate block">
-                                                                {route.to_user?.name || route.to_role?.replace(/_/g, ' ')}
-                                                            </span>
-                                                            <span className="text-[10px] text-slate-500 block truncate">
-                                                                {route.to_user?.designation || `Role: ${route.to_role?.replace(/_/g, ' ')}`}
-                                                            </span>
-                                                        </div>
-                                                    </div>
+                                                    {(() => {
+                                                        const originInfo = getAccurateRouteOrigin(route, activeSelectedPpmp);
+                                                        const recipientInfo = getAccurateRouteRecipient(route, activeSelectedPpmp);
 
-                                                    {/* Contextual Timestamps Breakdown */}
-                                                    <div className="mt-3 pt-2.5 border-t border-slate-200/80">
-                                                        {isReceiptCard ? (
-                                                            // Receipt Card breakdown
-                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                                                                <div className="p-2 bg-amber-50/60 rounded border border-amber-200/70">
-                                                                    <span className="font-bold text-amber-900 block">Date & Time Received in Office:</span>
-                                                                    <span className="font-mono text-amber-950 font-semibold">
-                                                                        {formatDate(route.received_at || route.submitted_at || route.acted_at)}
-                                                                    </span>
+                                                        return (
+                                                            <>
+                                                                <div className="mt-2.5 p-2 bg-slate-50/80 rounded-lg border border-slate-200/80 flex items-center justify-between gap-2 text-xs">
+                                                                    <div className="truncate">
+                                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Origin / Handled By</span>
+                                                                        <span className="font-semibold text-slate-900 truncate block">
+                                                                            {originInfo.name}
+                                                                        </span>
+                                                                        <span className="text-[10px] text-slate-500 block truncate">
+                                                                            {originInfo.designation}
+                                                                        </span>
+                                                                    </div>
+                                                                    <span className="text-slate-400 font-bold px-1.5">→</span>
+                                                                    <div className="text-right truncate">
+                                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Recipient / Next Office</span>
+                                                                        <span className="font-semibold text-slate-900 truncate block">
+                                                                            {recipientInfo.name}
+                                                                        </span>
+                                                                        <span className="text-[10px] text-slate-500 block truncate">
+                                                                            {recipientInfo.designation}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
-                                                                <div className="p-2 bg-slate-50 rounded border border-slate-200 flex flex-col justify-center">
-                                                                    <span className="font-bold text-slate-600 block">Document Custody Status:</span>
-                                                                    <span className="text-emerald-700 font-semibold">Under Active Review</span>
-                                                                </div>
-                                                            </div>
-                                                        ) : isApprovedCard ? (
-                                                            // Approved & Released Card breakdown
-                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                                                                <div className="p-2 bg-emerald-50/60 rounded border border-emerald-200/70">
-                                                                    <span className="font-bold text-emerald-900 block">Date & Time Approved:</span>
-                                                                    <span className="font-mono text-emerald-950 font-semibold">
-                                                                        {formatDate(route.acted_at || route.submitted_at)}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="p-2 bg-blue-50/60 rounded border border-blue-200/70">
-                                                                    <span className="font-bold text-blue-900 block">Forwarded / Released To:</span>
-                                                                    <span className="font-semibold text-blue-950 truncate block">
-                                                                        {route.to_user?.name || route.to_role?.replace(/_/g, ' ')}
-                                                                    </span>
-                                                                    <span className="text-[10px] text-blue-700 font-mono">
-                                                                        {route.received_at ? `Received: ${formatDate(route.received_at)}` : 'Pending office receipt'}
-                                                                    </span>
-                                                                </div>
-                                                            </div>
-                                                        ) : isSuspendedCard ? (
+
+                                                                {/* Contextual Timestamps Breakdown */}
+                                                                <div className="mt-3 pt-2.5 border-t border-slate-200/80">
+                                                                    {isReceiptCard ? (
+                                                                        // Receipt Card breakdown
+                                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                                                            <div className="p-2 bg-amber-50/60 rounded border border-amber-200/70">
+                                                                                <span className="font-bold text-amber-900 block">Date & Time Received in Office:</span>
+                                                                                <span className="font-mono text-amber-950 font-semibold">
+                                                                                    {formatDate(route.received_at || route.submitted_at || route.acted_at)}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className="p-2 bg-slate-50 rounded border border-slate-200 flex flex-col justify-center">
+                                                                                <span className="font-bold text-slate-600 block">Document Custody Status:</span>
+                                                                                <span className="text-emerald-700 font-semibold">Under Active Review</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : isApprovedCard ? (
+                                                                        // Approved & Released Card breakdown
+                                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                                                            <div className="p-2 bg-emerald-50/60 rounded border border-emerald-200/70">
+                                                                                <span className="font-bold text-emerald-900 block">Date & Time Approved:</span>
+                                                                                <span className="font-mono text-emerald-950 font-semibold">
+                                                                                    {formatDate(route.acted_at || route.submitted_at)}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className="p-2 bg-blue-50/60 rounded border border-blue-200/70">
+                                                                                <span className="font-bold text-blue-900 block">Forwarded / Released To:</span>
+                                                                                <span className="font-semibold text-blue-950 truncate block">
+                                                                                    {recipientInfo.name}
+                                                                                </span>
+                                                                                <span className="text-[10px] text-blue-700 font-mono">
+                                                                                    {route.received_at ? `Received: ${formatDate(route.received_at)}` : 'Pending office receipt'}
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : isSuspendedCard ? (
                                                             // Suspended / Returned Card breakdown
                                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
                                                                 <div className="p-2 bg-rose-50/60 rounded border border-rose-200/70">
@@ -443,6 +579,9 @@ export const RoutingTimeline = ({
                                                             </div>
                                                         )}
                                                     </div>
+                                                </>
+                                            );
+                                        })()}
 
                                                     {/* Action Remarks / Justification */}
                                                     {route.remarks && (

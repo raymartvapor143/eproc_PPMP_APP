@@ -18,6 +18,7 @@ class Ppmp extends Model
         'implementing_unit',
         'created_by',
         'title',
+        'source_of_fund',
         'account_code',
         'fiscal_year',
         'plan_type',
@@ -25,6 +26,7 @@ class Ppmp extends Model
         'delivery_period',
         'place_of_delivery',
         'payment_method',
+        'additional_condition',
         'warranty_and_other_terms',
         'attachment_list_data',
         'app_data',
@@ -45,6 +47,8 @@ class Ppmp extends Model
         'review_submitted_at',
         'budget_received_at',
         'budget_approved_at',
+        'pacco_received_at',
+        'pacco_approved_at',
         'oppmo_received_at',
         'oppmo_approved_at',
         'twg_received_at',
@@ -69,6 +73,8 @@ class Ppmp extends Model
         'review_submitted_at' => 'datetime',
         'budget_received_at' => 'datetime',
         'budget_approved_at' => 'datetime',
+        'pacco_received_at' => 'datetime',
+        'pacco_approved_at' => 'datetime',
         'oppmo_received_at' => 'datetime',
         'oppmo_approved_at' => 'datetime',
         'twg_received_at' => 'datetime',
@@ -78,6 +84,33 @@ class Ppmp extends Model
         'admin_received_at' => 'datetime',
     ];
 
+    public function isTrustFund(): bool
+    {
+        if ($this->source_of_fund) {
+            static $routeCache = [];
+            if (!array_key_exists($this->source_of_fund, $routeCache)) {
+                $fundSource = FundSource::where('name', $this->source_of_fund)->first();
+                $routeCache[$this->source_of_fund] = $fundSource ? $fundSource->workflow_route : null;
+            }
+
+            if ($routeCache[$this->source_of_fund] !== null) {
+                return $routeCache[$this->source_of_fund] === 'pacco';
+            }
+
+            if (stripos($this->source_of_fund, 'trust') !== false) {
+                return true;
+            }
+        }
+
+        if ($this->relationLoaded('items')) {
+            return $this->items->contains(function ($item) {
+                return $item->source_of_fund && stripos($item->source_of_fund, 'trust') !== false;
+            });
+        }
+
+        return $this->items()->where('source_of_fund', 'like', '%trust%')->exists();
+    }
+
     protected $appends = ['default_signatories'];
 
     public function getDefaultSignatoriesAttribute(): array
@@ -86,6 +119,7 @@ class Ppmp extends Model
         if ($cachedSignatories === null) {
             $signatories = \App\Models\PpmpSignatory::where('is_active', true)->get();
             $budget = $signatories->firstWhere('signatory_type', 'budget_requirement');
+            $pacco = $signatories->firstWhere('signatory_type', 'pacco_requirement');
             $bac = $signatories->firstWhere('signatory_type', 'bac_secretariat');
             $gov = $signatories->firstWhere('signatory_type', 'approved_by');
 
@@ -93,6 +127,10 @@ class Ppmp extends Model
                 'budget_requirement' => [
                     'name' => $budget ? $budget->name : 'DESSAMIE BUAT-SANCHEZ, CPA, JD',
                     'position' => $budget ? $budget->position : 'PGDH - PBO / BAC - Chairman',
+                ],
+                'pacco_requirement' => [
+                    'name' => $pacco ? $pacco->name : 'MAY FERNANDO-UY, CPA',
+                    'position' => $pacco ? $pacco->position : 'Provincial Accountant',
                 ],
                 'bac_secretariat' => [
                     'name' => $bac ? $bac->name : 'NORJANNA M. CAMAGUIN, MPA',
