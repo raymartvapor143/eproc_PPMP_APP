@@ -533,9 +533,12 @@ export const PPMPFormPage = ({ user, initialPpmp = null, initialSourceOfFund = '
                         Republic of the Philippines
                     </span>
                     <h2 className="text-lg font-black uppercase text-slate-900 tracking-wide">
-                        PROVINCE OF DAVAO DEL SUR
+                        PROVINCIAL GOVERNMENT OF DAVAO DEL SUR
                     </h2>
-                    <div className="text-xs font-bold text-blue-900 uppercase tracking-widest mt-0.5">
+                    <div className="text-xs font-semibold text-slate-600 mt-0.5">
+                        Matti, Digos City
+                    </div>
+                    <div className="text-xs font-bold text-blue-900 uppercase tracking-widest mt-1">
                         PROJECT PROCUREMENT MANAGEMENT PLAN (PPMP)
                     </div>
                 </div>

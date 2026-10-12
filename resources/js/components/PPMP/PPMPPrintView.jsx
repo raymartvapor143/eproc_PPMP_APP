@@ -150,12 +150,12 @@ export const PPMPPrintView = ({ ppmp, onBack }) => {
                             </td>
                             <td className="text-center align-middle p-1">
                                 <div className="text-xs uppercase font-normal tracking-wide leading-tight">Republic of the Philippines</div>
-                                <div className="text-base font-bold uppercase tracking-wider leading-tight">PROVINCE OF DAVAO DEL SUR</div>
-                                <div className="text-sm font-bold tracking-tight mt-0.5">
-                                    PROJECT PROCUREMENT MANAGEMENT PLAN (PPMP) NO. <span className="font-mono">{ppmp.ppmp_number}</span>
-                                </div>
+                                <div className="text-base font-bold uppercase tracking-wider leading-tight">PROVINCIAL GOVERNMENT OF DAVAO DEL SUR</div>
                                 <div className="text-sm font-normal tracking-tight mt-0.5">
                                     Matti, Digos City
+                                </div>
+                                <div className="text-sm font-bold tracking-tight mt-0.5">
+                                    PROJECT PROCUREMENT MANAGEMENT PLAN (PPMP) NO. <span className="font-mono">{ppmp.ppmp_number}</span>
                                 </div>
                                 <div className="flex items-center justify-center gap-10 text-xs font-bold mt-1">
                                     <label className="flex items-center gap-1.5 cursor-default">
