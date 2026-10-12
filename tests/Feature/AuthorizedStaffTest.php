@@ -129,7 +129,7 @@ class AuthorizedStaffTest extends TestCase
         $approveResponse->assertStatus(200);
 
         $ppmp->refresh();
-        $this->assertEquals('HEAD_APPROVED', $ppmp->status);
+        $this->assertEquals('READY_TO_PRINT', $ppmp->status);
     }
 
     public function test_admin_can_view_authorized_staff_letter(): void

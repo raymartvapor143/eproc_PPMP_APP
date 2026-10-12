@@ -101,6 +101,7 @@ Route::prefix('api')->group(function () {
 
         // Secure Private PDF Attachments
         Route::post('/ppmps/{uuid}/attachments', [PpmpAttachmentController::class, 'store']);
+        Route::patch('/ppmps/{uuid}/attachments/{attachmentUuid}/type', [PpmpAttachmentController::class, 'updateType']);
         Route::get('/ppmps/{uuid}/attachments/{attachmentUuid}/download', [PpmpAttachmentController::class, 'download']);
         Route::get('/ppmps/{uuid}/attachments/{attachmentUuid}/view', [PpmpAttachmentController::class, 'view']);
         Route::delete('/ppmps/{uuid}/attachments/{attachmentUuid}', [PpmpAttachmentController::class, 'destroy']);

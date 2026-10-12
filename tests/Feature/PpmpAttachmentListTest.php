@@ -212,4 +212,53 @@ class PpmpAttachmentListTest extends TestCase
             'message' => 'PPMP List of Attachment cannot be modified for this revision. The approved request scope is restricted to PPMP/APP procurement items only.',
         ]);
     }
+
+    public function test_attachment_list_preserves_ppmp_contractual_delivery_period_even_when_items_have_schedule_dates(): void
+    {
+        $ppmp = Ppmp::create([
+            'uuid' => (string) Str::uuid(),
+            'tracking_number' => 'TRK-2026-CATERING-01',
+            'ppmp_number' => '4',
+            'office_id' => $this->office->id,
+            'created_by' => $this->creator->id,
+            'fiscal_year' => 2026,
+            'title' => 'Catering Services Project',
+            'total_budget' => 60000.00,
+            'status' => 'DRAFT',
+            'delivery_period' => 'Date of Activity',
+            'place_of_delivery' => 'PGSO Warehouse/On-site',
+            'payment_method' => 'Staggered Delivery/Credit-basis',
+            'additional_condition' => 'Catering Services: With Date/Schedule',
+        ]);
+
+        $item = PpmpItem::create([
+            'ppmp_id' => $ppmp->id,
+            'item_no' => 1,
+            'description' => 'Food and Catering Services (buffet & packed meals)',
+            'estimated_budget' => 60000.00,
+            'source_of_fund' => 'General Fund',
+            'delivery_period' => '10/2026', // Item schedule month
+        ]);
+
+        $response = $this->actingAs($this->creator)->postJson("/api/ppmps/{$ppmp->uuid}/attachment-list", [
+            'office_name' => 'Provincial Governor\'s Office',
+            'project_title' => 'Food and Catering Services',
+            'total_budget' => 60000.00,
+            'delivery_period' => 'Date of Activity',
+            'place_of_delivery' => 'PGSO Warehouse/On-site',
+            'payment_method' => 'Staggered Delivery/Credit-basis',
+            'additional_condition' => 'Catering Services: With Date/Schedule',
+            'rows' => [
+                ['id' => 1, 'unit' => 'meals', 'description' => 'Buffet Meals', 'qty' => 100, 'unitCost' => 600, 'totalCost' => 60000],
+            ],
+        ]);
+
+        $response->assertStatus(200);
+
+        $ppmp->refresh();
+        $this->assertEquals('Date of Activity', $ppmp->delivery_period);
+        $this->assertEquals('Date of Activity', $ppmp->attachment_list_data['delivery_period']);
+        $this->assertEquals('10/2026', $item->delivery_period); // Item monthly schedule unchanged
+    }
 }
+

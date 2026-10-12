@@ -85,26 +85,72 @@ class PpmpAttachmentController extends Controller
         // Store in private disk (storage/app/private/)
         $path = $uploadedFile->storeAs($directory, $internalFilename, 'local');
 
+        $requestedType = $request->input('attachment_type');
+        $origName = basename($uploadedFile->getClientOriginalName());
+        $isMarketScoping = (
+            $requestedType === 'MARKET_SCOPING' ||
+            stripos($origName, 'market') !== false ||
+            stripos($origName, 'scoping') !== false
+        );
+
+        $attachmentType = $requestedType ?: ($isMarketScoping ? 'MARKET_SCOPING' : 'SUPPORTING_DOC');
+
         $attachment = PpmpAttachment::create([
             'uuid' => (string) Str::uuid(),
             'ppmp_id' => $ppmp->id,
             'uploaded_by' => $user->id,
-            'original_filename' => basename($uploadedFile->getClientOriginalName()),
+            'original_filename' => $origName,
             'stored_filename' => $internalFilename,
             'storage_path' => $path,
             'mime_type' => $mime,
+            'attachment_type' => $attachmentType,
             'file_size' => $uploadedFile->getSize(),
         ]);
 
         AuditLog::log('ATTACHMENT_UPLOADED', 'ppmp_attachments', $attachment->id, null, [
             'filename' => $attachment->original_filename,
+            'type' => $attachment->attachment_type,
             'size' => $attachment->file_size
         ], $user->id);
 
         return response()->json([
-            'message' => 'PDF attachment uploaded securely.',
+            'message' => 'Attachment uploaded securely.',
             'attachment' => $attachment->load('uploader'),
         ], 201);
+    }
+
+    /**
+     * Update an attachment's type (e.g. MARKET_SCOPING, SUPPORTING_DOC)
+     */
+    public function updateType(Request $request, string $uuid, string $attachmentUuid): JsonResponse
+    {
+        $user = $request->user();
+        $ppmp = Ppmp::where('uuid', $uuid)->firstOrFail();
+        $resolvedUuid = PpmpAttachment::decryptUuid($attachmentUuid);
+
+        $attachment = PpmpAttachment::where('ppmp_id', $ppmp->id)
+            ->where(function ($q) use ($attachmentUuid, $resolvedUuid) {
+                $q->where('uuid', $attachmentUuid)->orWhere('uuid', $resolvedUuid);
+            })
+            ->firstOrFail();
+
+        $isCreator = $ppmp->created_by === $user->id;
+        if (!$isCreator && !$user->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized to update attachment type.'], 403);
+        }
+
+        $validated = $request->validate([
+            'attachment_type' => 'required|string|in:MARKET_SCOPING,SUPPORTING_DOC,APP_DOCUMENT,ATTACHMENT_LIST_DOC,REQUEST_LETTER',
+        ]);
+
+        $attachment->update([
+            'attachment_type' => $validated['attachment_type'],
+        ]);
+
+        return response()->json([
+            'message' => 'Attachment type updated successfully.',
+            'attachment' => $attachment->fresh(['uploader']),
+        ]);
     }
 
     /**

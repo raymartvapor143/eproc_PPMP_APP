@@ -54,7 +54,7 @@ export const ReviewPanel = ({
     const handleApprove = async () => {
         let confirmText = 'Are you sure you want to APPROVE this PPMP?';
         if (effectiveRole === 'head') {
-            confirmText = 'Are you sure you want to APPROVE this PPMP? Official electronic signature indicator will be generated and the PPMP will be endorsed.';
+            confirmText = 'Are you sure you want to approve this PPMP? Official electronic signature indicator will be generated and this PPMP will be finalized and marked READY TO PRINT.';
         } else if (effectiveRole === 'budget_officer') {
             confirmText = 'Are you sure you want to certify budgetary requirements? Initial indicator will be affixed and this PPMP will automatically route to OPPMO.';
         } else if (effectiveRole === 'pacco') {
@@ -64,7 +64,7 @@ export const ReviewPanel = ({
                 ? 'Are you sure you want to approve this PPMP? Initial indicator will be affixed and this PPMP will be finalized and marked READY TO PRINT.'
                 : 'Are you sure you want to approve this PPMP? Initial indicator will be affixed and this PPMP will automatically route to TWG.';
         } else if (effectiveRole === 'twg') {
-            confirmText = 'Are you sure you want to grant final TWG technical approval? This will mark the PPMP as READY TO PRINT.';
+            confirmText = 'Are you sure you want to approve this PPMP? Technical review will be certified and this PPMP will automatically route to the Office Head for final approval.';
         }
 
         if (!window.confirm(confirmText)) return;

@@ -73,19 +73,19 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
     // Reviewer signatures require review approval before their initial/signature is valid
     const hasHeadApproved = Boolean(
         ppmp?.head_approved_at ||
-        !['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'].includes(ppmp?.status)
+        ppmp?.status === 'READY_TO_PRINT'
     );
-    const hasBudgetApproved = Boolean(
-        ppmp?.budget_approved_at ||
-        ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
+    const hasTwgApproved = Boolean(
+        ppmp?.twg_approved_at ||
+        ['HEAD_PENDING', 'HEAD_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
     );
     const hasOppmoApproved = Boolean(
         ppmp?.oppmo_approved_at ||
-        ['TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
+        ['TWG_REVIEW', 'TWG_RETURNED', 'HEAD_PENDING', 'HEAD_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
     );
-    const hasTwgApproved = Boolean(
-        ppmp?.ready_to_print_at ||
-        ppmp?.status === 'READY_TO_PRINT'
+    const hasBudgetApproved = Boolean(
+        ppmp?.budget_approved_at ||
+        ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'TWG_RETURNED', 'HEAD_PENDING', 'HEAD_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
     );
 
     const preparedSig = signatures.find(s => s.role === 'end_user')
@@ -151,11 +151,15 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
         const items = ppmp?.items || [];
         const nonHeaderItems = items.filter(i => !i.is_header);
 
+        const defaultEndUser = (ppmp?.program_name && String(ppmp.program_name).trim() !== '')
+            ? String(ppmp.program_name).trim()
+            : (ppmp?.implementing_unit || ppmp?.office?.name || 'Implementing Unit');
+
         if (nonHeaderItems.length > 0) {
             return nonHeaderItems.map((item, idx) => ({
                 id: item.id || idx + 1,
                 projectTitle: ppmp?.account_code ? `${ppmp.account_code}\n${item.description}` : item.description,
-                endUser: ppmp?.implementing_unit || ppmp?.office?.name || 'Implementing Unit',
+                endUser: defaultEndUser,
                 generalDescription: item.description || ppmp?.title || '',
                 modeOfProcurement: item.procurement_mode || 'Public Bidding',
                 earlyProcurement: item.pre_proc_conference ? 'YES' : 'NO',
@@ -172,7 +176,7 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
             {
                 id: 1,
                 projectTitle: ppmp?.account_code || 'General Requirements',
-                endUser: ppmp?.implementing_unit || ppmp?.office?.name || 'Implementing Unit',
+                endUser: defaultEndUser,
                 generalDescription: ppmp?.title || '',
                 modeOfProcurement: 'Public Bidding',
                 earlyProcurement: 'NO',
@@ -193,12 +197,16 @@ export const APPPrintView = ({ ppmp, user, canEdit = true, onBack, onGenerated }
     };
 
     const handleAddRow = () => {
+        const defaultEndUser = (ppmp?.program_name && String(ppmp.program_name).trim() !== '')
+            ? String(ppmp.program_name).trim()
+            : (ppmp?.implementing_unit || ppmp?.office?.name || '');
+
         setRows([
             ...rows,
             {
                 id: Date.now(),
                 projectTitle: '',
-                endUser: ppmp?.office?.name || '',
+                endUser: defaultEndUser,
                 generalDescription: '',
                 modeOfProcurement: 'Public Bidding',
                 earlyProcurement: 'NO',

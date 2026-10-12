@@ -127,7 +127,7 @@ class PaccoRoleTest extends TestCase
             'ppmp_number' => 'PPMP-2026-002',
             'title' => 'Under Review PPMP',
             'fiscal_year' => 2026,
-            'status' => 'BUDGET_OFFICER_REVIEW',
+            'status' => 'PACCO_REVIEW',
             'total_budget' => 150000,
             'office_id' => $this->office->id,
             'created_by' => $this->endUser->id,
@@ -139,6 +139,8 @@ class PaccoRoleTest extends TestCase
             'title' => 'Approved Ready to Print PPMP',
             'fiscal_year' => 2026,
             'status' => 'READY_TO_PRINT',
+            'source_of_fund' => 'Trust Fund',
+            'pacco_approved_at' => now(),
             'total_budget' => 200000,
             'office_id' => $this->office->id,
             'created_by' => $this->endUser->id,
@@ -149,7 +151,7 @@ class PaccoRoleTest extends TestCase
             'ppmp_number' => 'PPMP-2026-004',
             'title' => 'Returned Review PPMP',
             'fiscal_year' => 2026,
-            'status' => 'OPPMO_RETURNED',
+            'status' => 'PACCO_RETURNED',
             'total_budget' => 80000,
             'office_id' => $this->office->id,
             'created_by' => $this->endUser->id,
@@ -168,9 +170,9 @@ class PaccoRoleTest extends TestCase
         $recentPpmps = $response->json('recent_ppmps');
         $statuses = array_column($recentPpmps, 'status');
         $this->assertNotContains('DRAFT', $statuses);
-        $this->assertContains('BUDGET_OFFICER_REVIEW', $statuses);
+        $this->assertContains('PACCO_REVIEW', $statuses);
         $this->assertContains('READY_TO_PRINT', $statuses);
-        $this->assertContains('OPPMO_RETURNED', $statuses);
+        $this->assertContains('PACCO_RETURNED', $statuses);
     }
 
     public function test_pacco_ppmp_index_and_show_access_control(): void
@@ -282,17 +284,34 @@ class PaccoRoleTest extends TestCase
         $this->assertEquals('DRAFT', $createRes->json('ppmp.status'));
         $this->assertEquals('Trust Fund', $createRes->json('ppmp.source_of_fund'));
 
-        // 2. Submit to Head
-        $submitHeadRes = $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/submit-to-head");
-        $submitHeadRes->assertOk();
-        $this->assertEquals('HEAD_PENDING', $submitHeadRes->json('ppmp.status'));
+        // 2. Attach Market Scoping PDF, Generate APP, Generate Attachment List
+        $ppmp = Ppmp::where('uuid', $uuid)->first();
+        $ppmp->attachments()->create([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'original_filename' => 'market_scoping_assessment.pdf',
+            'stored_filename' => 'market_scoping_assessment.pdf',
+            'storage_path' => 'attachments/test_market_scoping.pdf',
+            'file_size' => 1024,
+            'mime_type' => 'application/pdf',
+            'attachment_type' => 'MARKET_SCOPING',
+            'uploaded_by' => $this->endUser->id,
+        ]);
 
-        // 3. Head Approves
-        $headApproveRes = $this->actingAs($headUser)->postJson("/api/ppmps/{$uuid}/head/approve");
-        $headApproveRes->assertOk();
-        $this->assertEquals('HEAD_APPROVED', $headApproveRes->json('ppmp.status'));
+        $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/app-data", [
+            'prepared_by_name' => 'NORJANNA M. CAMAGUIN, MPA',
+            'rows' => [
+                ['code' => 'APP-001', 'procurement_program' => 'Medical Equipment', 'total' => 300000.00]
+            ]
+        ])->assertOk();
 
-        // 4. End User submits for review -> MUST route to PACCO_REVIEW because it is Trust Fund
+        $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/attachment-list", [
+            'prepared_by_name' => 'End User Test',
+            'rows' => [
+                ['item_no' => 1, 'description' => 'Medical Equipment', 'qty' => 5, 'unit' => 'sets', 'unit_price' => 60000.00, 'total_amount' => 300000.00]
+            ]
+        ])->assertOk();
+
+        // 3. End User submits for review -> MUST route to PACCO_REVIEW because it is Trust Fund
         $submitReviewRes = $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/submit-for-review");
         $submitReviewRes->assertOk();
         $this->assertEquals('PACCO_REVIEW', $submitReviewRes->json('ppmp.status'));
@@ -301,24 +320,29 @@ class PaccoRoleTest extends TestCase
         $budgetUnauthorized = $this->actingAs($budgetUser)->postJson("/api/ppmps/{$uuid}/budget/approve");
         $budgetUnauthorized->assertStatus(422);
 
-        // 5. PACCO Reviewer receives document
+        // 4. PACCO Reviewer receives document
         $receiveRes = $this->actingAs($this->paccoUser)->postJson("/api/ppmps/{$uuid}/receive");
         $receiveRes->assertOk();
 
-        // 6. PACCO Reviewer approves -> routes to OPPMO_REVIEW
+        // 5. PACCO Reviewer approves -> routes to OPPMO_REVIEW
         $paccoApproveRes = $this->actingAs($this->paccoUser)->postJson("/api/ppmps/{$uuid}/pacco/approve");
         $paccoApproveRes->assertOk();
         $this->assertEquals('OPPMO_REVIEW', $paccoApproveRes->json('ppmp.status'));
 
-        // 7. OPPMO receives & approves -> routes to TWG_REVIEW
+        // 6. OPPMO receives & approves -> routes to TWG_REVIEW
         $oppmoApproveRes = $this->actingAs($oppmoUser)->postJson("/api/ppmps/{$uuid}/oppmo/approve");
         $oppmoApproveRes->assertOk();
         $this->assertEquals('TWG_REVIEW', $oppmoApproveRes->json('ppmp.status'));
 
-        // 8. TWG approves -> routes to READY_TO_PRINT
+        // 7. TWG approves -> routes to Office Head for approval (HEAD_PENDING)
         $twgApproveRes = $this->actingAs($twgUser)->postJson("/api/ppmps/{$uuid}/twg/approve");
         $twgApproveRes->assertOk();
-        $this->assertEquals('READY_TO_PRINT', $twgApproveRes->json('ppmp.status'));
+        $this->assertEquals('HEAD_PENDING', $twgApproveRes->json('ppmp.status'));
+
+        // 8. Office Head receives & approves -> routes to READY_TO_PRINT
+        $headApproveRes = $this->actingAs($headUser)->postJson("/api/ppmps/{$uuid}/head/approve");
+        $headApproveRes->assertOk();
+        $this->assertEquals('READY_TO_PRINT', $headApproveRes->json('ppmp.status'));
     }
 
     public function test_general_fund_workflow_routes_to_budget_officer_then_oppmo_then_twg(): void
@@ -388,9 +412,32 @@ class PaccoRoleTest extends TestCase
         $uuid = $createRes->json('ppmp.uuid');
         $this->assertEquals('DRAFT', $createRes->json('ppmp.status'));
 
-        // 2. Submit to Head & Head Approves
-        $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/submit-to-head")->assertOk();
-        $this->actingAs($headUser)->postJson("/api/ppmps/{$uuid}/head/approve")->assertOk();
+        // 2. Attach Market Scoping PDF, Generate APP, Generate Attachment List
+        $ppmp = Ppmp::where('uuid', $uuid)->first();
+        $ppmp->attachments()->create([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'original_filename' => 'market_scoping_assessment.pdf',
+            'stored_filename' => 'market_scoping_assessment.pdf',
+            'storage_path' => 'attachments/test_market_scoping.pdf',
+            'file_size' => 1024,
+            'mime_type' => 'application/pdf',
+            'attachment_type' => 'MARKET_SCOPING',
+            'uploaded_by' => $this->endUser->id,
+        ]);
+
+        $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/app-data", [
+            'prepared_by_name' => 'NORJANNA M. CAMAGUIN, MPA',
+            'rows' => [
+                ['code' => 'APP-002', 'procurement_program' => 'General Fund Items', 'total' => 50000.00]
+            ]
+        ])->assertOk();
+
+        $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/attachment-list", [
+            'prepared_by_name' => 'End User Test',
+            'rows' => [
+                ['item_no' => 1, 'description' => 'Office Supplies', 'qty' => 10, 'unit' => 'boxes', 'unit_price' => 5000.00, 'total_amount' => 50000.00]
+            ]
+        ])->assertOk();
 
         // 3. End User submits for review -> MUST route to BUDGET_OFFICER_REVIEW for General Fund
         $submitReviewRes = $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/submit-for-review");
@@ -407,10 +454,15 @@ class PaccoRoleTest extends TestCase
         $oppmoApproveRes->assertOk();
         $this->assertEquals('TWG_REVIEW', $oppmoApproveRes->json('ppmp.status'));
 
-        // 6. TWG approves -> routes to READY_TO_PRINT
+        // 6. TWG approves -> routes to Office Head for approval (HEAD_PENDING)
         $twgApproveRes = $this->actingAs($twgUser)->postJson("/api/ppmps/{$uuid}/twg/approve");
         $twgApproveRes->assertOk();
-        $this->assertEquals('READY_TO_PRINT', $twgApproveRes->json('ppmp.status'));
+        $this->assertEquals('HEAD_PENDING', $twgApproveRes->json('ppmp.status'));
+
+        // 7. Office Head approves -> routes to READY_TO_PRINT
+        $headApproveRes = $this->actingAs($headUser)->postJson("/api/ppmps/{$uuid}/head/approve");
+        $headApproveRes->assertOk();
+        $this->assertEquals('READY_TO_PRINT', $headApproveRes->json('ppmp.status'));
     }
 
     public function test_pacco_reviewer_can_return_and_enduser_can_resubmit_back_to_pacco(): void
@@ -444,8 +496,32 @@ class PaccoRoleTest extends TestCase
         ]);
         $uuid = $createRes->json('ppmp.uuid');
 
-        $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/submit-to-head")->assertOk();
-        $this->actingAs($headUser)->postJson("/api/ppmps/{$uuid}/head/approve")->assertOk();
+        $ppmp = Ppmp::where('uuid', $uuid)->first();
+        $ppmp->attachments()->create([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'original_filename' => 'market_scoping_assessment.pdf',
+            'stored_filename' => 'market_scoping_assessment.pdf',
+            'storage_path' => 'attachments/test_market_scoping.pdf',
+            'file_size' => 1024,
+            'mime_type' => 'application/pdf',
+            'attachment_type' => 'MARKET_SCOPING',
+            'uploaded_by' => $this->endUser->id,
+        ]);
+
+        $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/app-data", [
+            'prepared_by_name' => 'NORJANNA M. CAMAGUIN, MPA',
+            'rows' => [
+                ['code' => 'APP-TF', 'procurement_program' => 'Trust Fund Items', 'total' => 100000.00]
+            ]
+        ])->assertOk();
+
+        $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/attachment-list", [
+            'prepared_by_name' => 'End User Test',
+            'rows' => [
+                ['item_no' => 1, 'description' => 'Trust Fund Item', 'qty' => 1, 'unit' => 'lot', 'unit_price' => 100000.00, 'total_amount' => 100000.00]
+            ]
+        ])->assertOk();
+
         $this->actingAs($this->endUser)->postJson("/api/ppmps/{$uuid}/submit-for-review")->assertOk();
 
         // PACCO returns with remarks

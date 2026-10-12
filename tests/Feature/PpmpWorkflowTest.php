@@ -66,7 +66,7 @@ class PpmpWorkflowTest extends TestCase
 
     /**
      * Test full normal happy path workflow
-     * DRAFT -> HEAD -> REVIEW -> BUDGET -> OPPMO -> TWG -> READY_TO_PRINT
+     * DRAFT -> (Pre-submission checks: APP, Attachment List, Market Scoping PDF) -> BUDGET -> OPPMO -> TWG -> HEAD -> READY_TO_PRINT
      */
     public function test_complete_ppmp_workflow_and_signatures(): void
     {
@@ -96,70 +96,103 @@ class PpmpWorkflowTest extends TestCase
         $ppmp = Ppmp::where('uuid', $ppmpUuid)->first();
         $this->assertTrue($ppmp->signatures()->where('role', 'end_user')->exists());
 
-        // 2. End User uploads a private PDF attachment
+        // 2. Attempting to submit for review before requirements must fail with 422
+        $prematureRes = $this->actingAs($this->endUser)->postJson("/api/ppmps/{$ppmpUuid}/submit-for-review");
+        $prematureRes->assertStatus(422)
+            ->assertJsonPath('checks.is_ready', false)
+            ->assertJsonPath('checks.app_generated', false)
+            ->assertJsonPath('checks.attachment_list_generated', false)
+            ->assertJsonPath('checks.market_scoping_attached', false);
+
+        // 3. End User uploads Market Scoping PDF
         Storage::fake('local');
         $pdfContent = "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\nxref\n0 2\ntrailer<</Size 2/Root 1 0 R>>\nstartxref\n50\n%%EOF";
-        $fakePdf = UploadedFile::fake()->createWithContent('tech_specs.pdf', $pdfContent);
+        $fakePdf = UploadedFile::fake()->createWithContent('market_scoping_assessment.pdf', $pdfContent);
 
         $uploadRes = $this->actingAs($this->endUser)->postJson("/api/ppmps/{$ppmpUuid}/attachments", [
             'file' => $fakePdf,
+            'attachment_type' => 'MARKET_SCOPING',
         ]);
         $uploadRes->assertStatus(201);
         $attachmentUuid = $uploadRes->json('attachment.uuid');
 
-        // Verify attachment is not public and can be downloaded securely
+        // Verify attachment can be downloaded securely
         $downloadRes = $this->actingAs($this->endUser)->get("/api/ppmps/{$ppmpUuid}/attachments/{$attachmentUuid}/download");
         $downloadRes->assertStatus(200);
 
-        // 3. End user submits to Head
-        $submitHeadRes = $this->actingAs($this->endUser)->postJson("/api/ppmps/{$ppmpUuid}/submit-to-head");
-        $submitHeadRes->assertStatus(200);
-        $this->assertEquals('HEAD_PENDING', $submitHeadRes->json('ppmp.status'));
+        // 4. Generate/Save APP Data and PPMP List of Attachment Data
+        $appSaveRes = $this->actingAs($this->endUser)->postJson("/api/ppmps/{$ppmpUuid}/app-data", [
+            'prepared_by_name' => 'NORJANNA M. CAMAGUIN, MPA',
+            'rows' => [
+                [
+                    'code' => 'APP-001',
+                    'procurement_program' => 'Workstation Procurement',
+                    'pmo_end_user' => 'TEST-OFFICE',
+                    'total' => 250000.00,
+                ]
+            ]
+        ]);
+        $appSaveRes->assertStatus(200);
 
-        // Head must receive before approving
-        $this->actingAs($this->headUser)->postJson("/api/ppmps/{$ppmpUuid}/receive")->assertStatus(200);
+        $attListSaveRes = $this->actingAs($this->endUser)->postJson("/api/ppmps/{$ppmpUuid}/attachment-list", [
+            'prepared_by_name' => 'Test End User',
+            'rows' => [
+                [
+                    'item_no' => 1,
+                    'description' => 'Workstation Unit',
+                    'unit' => 'unit',
+                    'qty' => 2,
+                    'unit_price' => 125000.00,
+                    'total_amount' => 250000.00,
+                ]
+            ]
+        ]);
+        $attListSaveRes->assertStatus(200);
 
-        // 4. Head Approves PPMP
-        $headApproveRes = $this->actingAs($this->headUser)->postJson("/api/ppmps/{$ppmpUuid}/head/approve");
-        $headApproveRes->assertStatus(200);
-        $this->assertEquals('HEAD_APPROVED', $headApproveRes->json('ppmp.status'));
-        $this->assertTrue($ppmp->fresh()->signatures()->where('role', 'head')->exists());
-
-        // 5. End user submits for formal review
+        // 5. Submit for formal review: General Fund routes directly to Provincial Budget Officer
         $submitReviewRes = $this->actingAs($this->endUser)->postJson("/api/ppmps/{$ppmpUuid}/submit-for-review");
         $submitReviewRes->assertStatus(200);
         $this->assertEquals('BUDGET_OFFICER_REVIEW', $submitReviewRes->json('ppmp.status'));
 
-        // Budget Officer receives before approving
+        // 6. Budget Officer receives before approving
         $this->actingAs($this->budgetUser)->postJson("/api/ppmps/{$ppmpUuid}/receive")->assertStatus(200);
 
-        // 6. Budget Officer Approves (Initial indicator beside name)
+        // Budget Officer Approves -> routes to OPPMO_REVIEW
         $budgetApproveRes = $this->actingAs($this->budgetUser)->postJson("/api/ppmps/{$ppmpUuid}/budget/approve");
         $budgetApproveRes->assertStatus(200);
         $this->assertEquals('OPPMO_REVIEW', $budgetApproveRes->json('ppmp.status'));
         $this->assertTrue($ppmp->fresh()->signatures()->where('role', 'budget_officer')->exists());
 
-        // OPPMO receives before approving
+        // 7. OPPMO receives before approving
         $this->actingAs($this->oppmoUser)->postJson("/api/ppmps/{$ppmpUuid}/receive")->assertStatus(200);
 
-        // 7. OPPMO Approves (Initial indicator beside name)
+        // OPPMO Approves -> routes to TWG_REVIEW
         $oppmoApproveRes = $this->actingAs($this->oppmoUser)->postJson("/api/ppmps/{$ppmpUuid}/oppmo/approve");
         $oppmoApproveRes->assertStatus(200);
         $this->assertEquals('TWG_REVIEW', $oppmoApproveRes->json('ppmp.status'));
         $this->assertTrue($ppmp->fresh()->signatures()->where('role', 'oppmo')->exists());
 
-        // TWG receives before approving
+        // 8. TWG receives before approving
         $this->actingAs($this->twgUser)->postJson("/api/ppmps/{$ppmpUuid}/receive")->assertStatus(200);
 
-        // 8. TWG Approves (TWG E-Signature indicator)
+        // TWG Approves -> routes to Office Head for approval (HEAD_PENDING)
         $twgApproveRes = $this->actingAs($this->twgUser)->postJson("/api/ppmps/{$ppmpUuid}/twg/approve");
         $twgApproveRes->assertStatus(200);
-        $this->assertEquals('READY_TO_PRINT', $twgApproveRes->json('ppmp.status'));
+        $this->assertEquals('HEAD_PENDING', $twgApproveRes->json('ppmp.status'));
         $this->assertTrue($ppmp->fresh()->signatures()->where('role', 'twg')->exists());
 
-        // Verify all 4 required approval signatures exist
+        // 9. Office Head receives before approving
+        $this->actingAs($this->headUser)->postJson("/api/ppmps/{$ppmpUuid}/receive")->assertStatus(200);
+
+        // Office Head Approves -> marks READY_TO_PRINT
+        $headApproveRes = $this->actingAs($this->headUser)->postJson("/api/ppmps/{$ppmpUuid}/head/approve");
+        $headApproveRes->assertStatus(200);
+        $this->assertEquals('READY_TO_PRINT', $headApproveRes->json('ppmp.status'));
+        $this->assertTrue($ppmp->fresh()->signatures()->where('role', 'head')->exists());
+
+        // Verify all 5 required approval signatures exist
         $freshPpmp = $ppmp->fresh(['signatures', 'routes']);
-        $this->assertEquals(5, $freshPpmp->signatures()->count()); // end_user + head + budget + oppmo + twg
+        $this->assertEquals(5, $freshPpmp->signatures()->count()); // end_user + budget + oppmo + twg + head
         $this->assertTrue($freshPpmp->routes()->where('status', 'READY_TO_PRINT')->exists());
     }
 
@@ -177,6 +210,19 @@ class PpmpWorkflowTest extends TestCase
             'fiscal_year' => '2026',
             'status' => 'BUDGET_OFFICER_REVIEW',
             'total_budget' => 100000.00,
+            'app_data' => ['is_generated' => true, 'saved_at' => now()->toIso8601String()],
+            'attachment_list_data' => ['is_generated' => true, 'saved_at' => now()->toIso8601String()],
+        ]);
+
+        $ppmp->attachments()->create([
+            'uuid' => (string) Str::uuid(),
+            'original_filename' => 'market_scoping.pdf',
+            'stored_filename' => 'market_scoping.pdf',
+            'storage_path' => 'attachments/test_market_scoping.pdf',
+            'file_size' => 1024,
+            'mime_type' => 'application/pdf',
+            'attachment_type' => 'MARKET_SCOPING',
+            'uploaded_by' => $this->endUser->id,
         ]);
 
         $item = PpmpItem::create([
@@ -258,21 +304,24 @@ class PpmpWorkflowTest extends TestCase
             'created_by' => $this->endUser->id,
             'title' => 'Receive Tracking Test',
             'fiscal_year' => '2026',
-            'status' => 'HEAD_PENDING',
-            'head_submitted_at' => now(),
+            'status' => 'DRAFT',
             'total_budget' => 60000.00,
+            'app_data' => ['is_generated' => true, 'saved_at' => now()->toIso8601String()],
+            'attachment_list_data' => ['is_generated' => true, 'saved_at' => now()->toIso8601String()],
         ]);
 
-        // 1. Head receives document
-        $this->assertNull($ppmp->fresh()->head_received_at);
-        $headReceiveRes = $this->actingAs($this->headUser)->postJson("/api/ppmps/{$ppmp->uuid}/receive");
-        $headReceiveRes->assertStatus(200);
-        $this->assertNotNull($ppmp->fresh()->head_received_at);
+        $ppmp->attachments()->create([
+            'uuid' => (string) Str::uuid(),
+            'original_filename' => 'market_scoping.pdf',
+            'stored_filename' => 'market_scoping.pdf',
+            'storage_path' => 'attachments/test_market_scoping.pdf',
+            'file_size' => 1024,
+            'mime_type' => 'application/pdf',
+            'attachment_type' => 'MARKET_SCOPING',
+            'uploaded_by' => $this->endUser->id,
+        ]);
 
-        // Head approves
-        $this->actingAs($this->headUser)->postJson("/api/ppmps/{$ppmp->uuid}/head/approve")->assertStatus(200);
-
-        // End user submits for review
+        // 1. End user submits for review (General Fund routes to Budget Officer)
         $this->actingAs($this->endUser)->postJson("/api/ppmps/{$ppmp->uuid}/submit-for-review")->assertStatus(200);
         $this->assertEquals('BUDGET_OFFICER_REVIEW', $ppmp->fresh()->status);
         $this->assertNull($ppmp->fresh()->budget_received_at);
@@ -372,4 +421,107 @@ class PpmpWorkflowTest extends TestCase
         $this->assertNotEmpty($found['items']);
         $this->assertEquals('8/2026', $found['items'][0]['start_date']);
     }
+
+    public function test_tracker_number_sequence_continues_correctly_when_amendments_or_supplementals_exist(): void
+    {
+        // 1. Create baseline PPMP with tracking number sequence 7
+        $baseline = Ppmp::create([
+            'uuid' => (string) Str::uuid(),
+            'tracking_number' => 'TEST-OFFICEGOODS-2026-000007',
+            'ppmp_number' => '7',
+            'title' => 'Project Seven',
+            'fiscal_year' => '2026',
+            'source_of_fund' => 'General Fund',
+            'plan_type' => 'INDICATIVE',
+            'total_budget' => 100000,
+            'status' => 'READY_TO_PRINT',
+            'office_id' => $this->office->id,
+            'created_by' => $this->endUser->id,
+            'amendment_status' => 'APPROVED',
+            'is_annual' => true,
+        ]);
+
+        // 2. An amendment child was created with the same tracking number (as in approved amendments)
+        $amendedChild = Ppmp::create([
+            'uuid' => (string) Str::uuid(),
+            'parent_id' => $baseline->id,
+            'tracking_number' => 'TEST-OFFICEGOODS-2026-000007', // Reuses baseline tracker number
+            'ppmp_number' => '7',
+            'title' => 'Project Seven Amended',
+            'fiscal_year' => '2026',
+            'source_of_fund' => 'General Fund',
+            'plan_type' => 'INDICATIVE',
+            'total_budget' => 120000,
+            'status' => 'DRAFT',
+            'office_id' => $this->office->id,
+            'created_by' => $this->endUser->id,
+            'amendment_type' => 'SUPPLEMENTAL',
+            'is_annual' => false,
+        ]);
+
+        // 3. Now create a new PPMP
+        $res = $this->actingAs($this->endUser)->postJson('/api/ppmps', [
+            'title' => 'Brand New Project Eight',
+            'fiscal_year' => '2026',
+            'plan_type' => 'INDICATIVE',
+            'source_of_fund' => 'General Fund',
+            'items' => [
+                [
+                    'description' => 'Supplies Item',
+                    'project_type' => 'Goods',
+                    'estimated_budget' => 50000,
+                ],
+            ],
+        ]);
+
+        $res->assertStatus(201);
+        $newPpmp = Ppmp::where('uuid', $res->json('ppmp.uuid'))->firstOrFail();
+
+        // Must be sequence 000008 (NOT skipped to 000009!)
+        $this->assertEquals('TEST-OFFICEGOODS-2026-000008', $newPpmp->tracking_number);
+    }
+
+    public function test_ppmp_stores_and_updates_program_name(): void
+    {
+        $res = $this->actingAs($this->endUser)->postJson('/api/ppmps', [
+            'title' => 'Health Equipment Procurement',
+            'fiscal_year' => '2026',
+            'plan_type' => 'INDICATIVE',
+            'source_of_fund' => 'General Fund',
+            'program_name' => 'Provincial Health Outreach Program',
+            'implementing_unit' => 'Provincial Health Office',
+            'items' => [
+                [
+                    'description' => 'Medical Monitors',
+                    'project_type' => 'Goods',
+                    'estimated_budget' => 75000,
+                ],
+            ],
+        ]);
+
+        $res->assertStatus(201);
+        $ppmp = Ppmp::where('uuid', $res->json('ppmp.uuid'))->firstOrFail();
+        $this->assertEquals('Provincial Health Outreach Program', $ppmp->program_name);
+
+        // Update program_name
+        $updateRes = $this->actingAs($this->endUser)->putJson("/api/ppmps/{$ppmp->uuid}", [
+            'title' => 'Health Equipment Procurement Updated',
+            'fiscal_year' => '2026',
+            'plan_type' => 'INDICATIVE',
+            'source_of_fund' => 'General Fund',
+            'program_name' => 'Provincial Nutrition & Wellness Program',
+            'implementing_unit' => 'Provincial Health Office',
+            'items' => [
+                [
+                    'description' => 'Medical Monitors',
+                    'project_type' => 'Goods',
+                    'estimated_budget' => 75000,
+                ],
+            ],
+        ]);
+
+        $updateRes->assertStatus(200);
+        $this->assertEquals('Provincial Nutrition & Wellness Program', $ppmp->fresh()->program_name);
+    }
 }
+

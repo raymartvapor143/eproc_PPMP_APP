@@ -99,6 +99,7 @@ class PpmpController extends Controller
             'plan_type' => 'required|in:INDICATIVE,FINAL',
             'office_id' => 'nullable|exists:offices,id',
             'implementing_unit' => 'nullable|string|max:255',
+            'program_name' => 'nullable|string|max:500',
             'delivery_period' => 'nullable|string',
             'place_of_delivery' => 'nullable|string',
             'payment_method' => 'nullable|string',
@@ -155,18 +156,31 @@ class PpmpController extends Controller
             $year = $validated['fiscal_year'];
             $trackerPrefix = "{$officeCode}{$typeCode}-{$year}-";
 
-            // Count existing PPMPs with this prefix in this fiscal year to determine next sequence
-            $latestCount = Ppmp::where('fiscal_year', $year)
+            // Determine next sequence by finding the highest sequence number among existing trackers
+            // This prevents duplicate or skipped numbers when amendments or supplementals share the same tracker number
+            $existingTrackers = Ppmp::where('fiscal_year', $year)
                 ->where('tracking_number', 'like', "{$trackerPrefix}%")
                 ->lockForUpdate()
-                ->count();
-            $nextSeq = str_pad($latestCount + 1, 6, '0', STR_PAD_LEFT);
+                ->pluck('tracking_number');
+
+            $maxSeq = 0;
+            $prefixRegex = '/^' . preg_quote($trackerPrefix, '/') . '(\d+)/';
+            foreach ($existingTrackers as $tn) {
+                if (preg_match($prefixRegex, $tn, $matches)) {
+                    $num = (int) $matches[1];
+                    if ($num > $maxSeq) {
+                        $maxSeq = $num;
+                    }
+                }
+            }
+
+            $nextSeq = str_pad($maxSeq + 1, 6, '0', STR_PAD_LEFT);
             $trackingNumber = "{$trackerPrefix}{$nextSeq}";
 
             // User input for PPMP Number (e.g. 0, 1, 2, 3...) or fallback to sequential index
             $ppmpNumber = isset($validated['ppmp_number']) && $validated['ppmp_number'] !== ''
                 ? (string) $validated['ppmp_number']
-                : (string) ($latestCount + 1);
+                : (string) ($maxSeq + 1);
 
             $sourceOfFund = $validated['source_of_fund'] ?? 'General Fund';
 
@@ -176,6 +190,7 @@ class PpmpController extends Controller
                 'ppmp_number' => $ppmpNumber,
                 'office_id' => $officeId,
                 'implementing_unit' => $validated['implementing_unit'] ?? null,
+                'program_name' => $validated['program_name'] ?? null,
                 'created_by' => $user->id,
                 'title' => $validated['title'],
                 'source_of_fund' => $sourceOfFund,
@@ -407,6 +422,7 @@ class PpmpController extends Controller
             'fiscal_year' => 'required|string|max:10',
             'plan_type' => 'required|in:INDICATIVE,FINAL',
             'implementing_unit' => 'nullable|string|max:255',
+            'program_name' => 'nullable|string|max:500',
             'delivery_period' => 'nullable|string',
             'place_of_delivery' => 'nullable|string',
             'payment_method' => 'nullable|string',
@@ -440,6 +456,7 @@ class PpmpController extends Controller
             $ppmp->update([
                 'ppmp_number' => isset($validated['ppmp_number']) && $validated['ppmp_number'] !== '' ? $validated['ppmp_number'] : $ppmp->ppmp_number,
                 'implementing_unit' => array_key_exists('implementing_unit', $validated) ? $validated['implementing_unit'] : $ppmp->implementing_unit,
+                'program_name' => array_key_exists('program_name', $validated) ? $validated['program_name'] : $ppmp->program_name,
                 'title' => $validated['title'],
                 'source_of_fund' => $sourceOfFund,
                 'account_code' => $validated['account_code'] ?? $ppmp->account_code,
@@ -517,6 +534,7 @@ class PpmpController extends Controller
             'HEAD_APPROVED',
             'HEAD_RETURNED',
             'BUDGET_OFFICER_RETURNED',
+            'PACCO_RETURNED',
             'OPPMO_RETURNED',
             'TWG_RETURNED'
         ]);
@@ -524,6 +542,7 @@ class PpmpController extends Controller
         $isReviewerEditable = (
             ($user->isHead() && in_array($ppmp->status, ['HEAD_PENDING', 'HEAD_APPROVED']) && $user->office_id === $ppmp->office_id) ||
             ($user->isBudgetOfficer() && $ppmp->status === 'BUDGET_OFFICER_REVIEW') ||
+            ($user->isPacco() && $ppmp->status === 'PACCO_REVIEW') ||
             ($user->isOppmo() && $ppmp->status === 'OPPMO_REVIEW') ||
             ($user->isTwg() && $ppmp->status === 'TWG_REVIEW')
         );
@@ -624,6 +643,7 @@ class PpmpController extends Controller
             'HEAD_APPROVED',
             'HEAD_RETURNED',
             'BUDGET_OFFICER_RETURNED',
+            'PACCO_RETURNED',
             'OPPMO_RETURNED',
             'TWG_RETURNED'
         ]);
@@ -631,6 +651,7 @@ class PpmpController extends Controller
         $isReviewerEditable = (
             ($user->isHead() && in_array($ppmp->status, ['HEAD_PENDING', 'HEAD_APPROVED']) && $user->office_id === $ppmp->office_id) ||
             ($user->isBudgetOfficer() && $ppmp->status === 'BUDGET_OFFICER_REVIEW') ||
+            ($user->isPacco() && $ppmp->status === 'PACCO_REVIEW') ||
             ($user->isOppmo() && $ppmp->status === 'OPPMO_REVIEW') ||
             ($user->isTwg() && $ppmp->status === 'TWG_REVIEW')
         );

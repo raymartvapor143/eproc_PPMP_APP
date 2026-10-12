@@ -197,7 +197,7 @@ class SecurityHardeningTest extends TestCase
         // Head A (correct office) approves successfully
         $headARes = $this->actingAs($this->headUserA)->postJson("/api/ppmps/{$ppmpA->uuid}/head/approve");
         $headARes->assertStatus(200);
-        $this->assertEquals('HEAD_APPROVED', $headARes->json('ppmp.status'));
+        $this->assertEquals('READY_TO_PRINT', $headARes->json('ppmp.status'));
     }
 
     /**

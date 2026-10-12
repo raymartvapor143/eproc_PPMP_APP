@@ -98,3 +98,14 @@ export const findMatchingOption = (val, optionsList = [], canonicalizeFn = norma
     const match = optionsList.find(opt => canonicalizeFn(opt) === canonTarget);
     return match || null;
 };
+
+/**
+ * Checks if a string represents a calendar date, month, or date range from the item schedule table
+ * (e.g. "10/2026", "2026-10", "10/2026 - 11/2026") rather than a contractual delivery term specification.
+ */
+export const isDateScheduleString = (val) => {
+    if (!val || typeof val !== 'string') return false;
+    const trimmed = val.trim();
+    return /^\d{1,2}\/\d{4}(\s*-\s*\d{1,2}\/\d{4})?$/.test(trimmed) || /^\d{4}-\d{2}(\s*-\s*\d{4}-\d{2})?$/.test(trimmed);
+};
+

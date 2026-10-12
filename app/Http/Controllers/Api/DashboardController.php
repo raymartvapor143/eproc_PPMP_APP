@@ -40,50 +40,50 @@ class DashboardController extends Controller
                 'total' => (clone $base)->count(),
             ];
 
-            $recentPpmps = (clone $base)->with(['office', 'signatures', 'items'])->latest('updated_at')->take(100)->get();
-
+            $endUserRecent = clone $base;
+            $recentPpmps = $endUserRecent->with(['office', 'signatures', 'items'])->latest('updated_at')->take(100)->get();
         } elseif ($user->isHead()) {
             $base = Ppmp::where('office_id', $user->office_id)->whereDoesntHave('children');
 
             $metrics = [
                 'pending_endorsement' => (clone $base)->where('status', 'HEAD_PENDING')->count(),
-                'endorsed_approved' => (clone $base)->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'])->count(),
+                'endorsed_approved' => (clone $base)->where('status', 'READY_TO_PRINT')->count(),
                 'returned' => (clone $base)->where('status', 'HEAD_RETURNED')->count(),
                 'total_office' => (clone $base)->count(),
             ];
 
-            $recentPpmps = (clone $base)->with(['creator', 'signatures'])->latest('updated_at')->take(100)->get();
-
+            $headRecent = clone $base;
+            $recentPpmps = $headRecent->with(['creator', 'signatures'])->latest('updated_at')->take(100)->get();
         } elseif ($user->isBudgetOfficer()) {
             $base = Ppmp::whereDoesntHave('children');
 
             $metrics = [
                 'pending_review' => (clone $base)->where('status', 'BUDGET_OFFICER_REVIEW')->count(),
                 'returned' => (clone $base)->where('status', 'BUDGET_OFFICER_RETURNED')->count(),
-                'approved' => (clone $base)->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED', 'BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED'])->count(),
+                'approved' => (clone $base)->whereIn('status', ['OPPMO_REVIEW', 'TWG_REVIEW', 'HEAD_PENDING', 'READY_TO_PRINT'])->count(),
             ];
 
-            $recentPpmps = (clone $base)->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED', 'OPPMO_REVIEW', 'TWG_REVIEW', 'READY_TO_PRINT'])
+            $budgetRecent = clone $base;
+            $recentPpmps = $budgetRecent->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'BUDGET_OFFICER_RETURNED', 'OPPMO_REVIEW', 'TWG_REVIEW', 'HEAD_PENDING', 'READY_TO_PRINT'])
                 ->with(['office', 'creator', 'signatures'])
                 ->latest('updated_at')
                 ->take(100)
                 ->get();
-
         } elseif ($user->isOppmo()) {
             $base = Ppmp::whereDoesntHave('children');
 
             $metrics = [
                 'pending_review' => (clone $base)->where('status', 'OPPMO_REVIEW')->count(),
                 'returned' => (clone $base)->where('status', 'OPPMO_RETURNED')->count(),
-                'approved' => (clone $base)->whereIn('status', ['TWG_REVIEW', 'READY_TO_PRINT'])->count(),
+                'approved' => (clone $base)->whereIn('status', ['TWG_REVIEW', 'HEAD_PENDING', 'READY_TO_PRINT'])->count(),
             ];
 
-            $recentPpmps = (clone $base)->whereIn('status', ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'READY_TO_PRINT'])
+            $oppmoRecent = clone $base;
+            $recentPpmps = $oppmoRecent->whereIn('status', ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'HEAD_PENDING', 'READY_TO_PRINT'])
                 ->with(['office', 'creator', 'signatures'])
                 ->latest('updated_at')
                 ->take(100)
                 ->get();
-
         } elseif ($user->isTwg()) {
             $base = Ppmp::whereDoesntHave('children');
 
@@ -93,29 +93,33 @@ class DashboardController extends Controller
                 'ready_to_print' => (clone $base)->where('status', 'READY_TO_PRINT')->count(),
             ];
 
-            $recentPpmps = (clone $base)->whereIn('status', ['TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'])
+            $twgRecent = clone $base;
+            $recentPpmps = $twgRecent->whereIn('status', ['TWG_REVIEW', 'TWG_RETURNED', 'HEAD_PENDING', 'READY_TO_PRINT'])
                 ->with(['office', 'creator', 'signatures'])
                 ->latest('updated_at')
                 ->take(100)
                 ->get();
-
         } elseif ($user->isPacco()) {
             $base = Ppmp::whereDoesntHave('children');
 
             $metrics = [
-                'pending_review' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_REVIEW', 'OPPMO_REVIEW', 'TWG_REVIEW', 'HEAD_APPROVED'])->count(),
-                'returned' => (clone $base)->whereIn('status', ['BUDGET_OFFICER_RETURNED', 'OPPMO_RETURNED', 'TWG_RETURNED'])->count(),
-                'approved' => (clone $base)->where('status', 'READY_TO_PRINT')->count(),
+                'pending_review' => (clone $base)->where('status', 'PACCO_REVIEW')->count(),
+                'returned' => (clone $base)->where('status', 'PACCO_RETURNED')->count(),
+                'approved' => (clone $base)->whereIn('status', ['OPPMO_REVIEW', 'TWG_REVIEW', 'HEAD_PENDING', 'READY_TO_PRINT'])->count(),
                 'ready_to_print' => (clone $base)->where('status', 'READY_TO_PRINT')->count(),
-                'total_review' => (clone $base)->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'])->count(),
+                'total_review' => (clone $base)->whereNotIn('status', ['DRAFT'])->count(),
             ];
 
-            $recentPpmps = (clone $base)->whereNotIn('status', ['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'])
+            $paccoRecent = clone $base;
+            $recentPpmps = $paccoRecent->where(function ($q) {
+                $q->whereIn('status', ['PACCO_REVIEW', 'PACCO_RETURNED'])
+                    ->orWhereNotNull('pacco_approved_at')
+                    ->orWhere('source_of_fund', 'like', '%trust%');
+            })
                 ->with(['office', 'creator', 'signatures'])
                 ->latest('updated_at')
                 ->take(100)
                 ->get();
-
         } elseif ($user->isSuperAdmin()) {
             // Super Admin: Full Executive Overview & Analytics
             $base = Ppmp::whereDoesntHave('children');
@@ -130,10 +134,12 @@ class DashboardController extends Controller
                 'pending_amendments' => Ppmp::where('amendment_status', 'PENDING_APPROVAL')->count(),
             ];
 
-            $recentPpmps = (clone $base)->with(['office', 'creator', 'signatures'])->latest('updated_at')->take(100)->get();
+            $superRecent = clone $base;
+            $recentPpmps = $superRecent->with(['office', 'creator', 'signatures'])->latest('updated_at')->take(100)->get();
 
             // Budget distribution by office
-            $budgetByOffice = (clone $base)
+            $budgetByOfficeQuery = clone $base;
+            $budgetByOffice = $budgetByOfficeQuery
                 ->join('offices', 'ppmps.office_id', '=', 'offices.id')
                 ->selectRaw('offices.id, offices.code, offices.name, count(ppmps.id) as ppmp_count, sum(ppmps.total_budget) as total_budget')
                 ->groupBy('offices.id', 'offices.code', 'offices.name')
@@ -151,8 +157,8 @@ class DashboardController extends Controller
 
             // Procurement Mode breakdown from items
             $procurementModes = PpmpItem::whereHas('ppmp', function ($q) {
-                    $q->whereDoesntHave('children');
-                })
+                $q->whereDoesntHave('children');
+            })
                 ->selectRaw('procurement_mode, count(*) as item_count, sum(estimated_budget) as total_amount')
                 ->whereNotNull('procurement_mode')
                 ->where('procurement_mode', '!=', '')

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { formatCurrency, formatDate } from '../UI/StatusBadge';
-import { Printer, ArrowLeft, Plus, Trash2, Edit3, Loader2, Sparkles, ShieldCheck, Truck, Lock, Leaf, CheckCircle2, ChevronRight, ChevronLeft, Eye, Layers, Copy, Check } from 'lucide-react';
+import { Printer, ArrowLeft, Plus, Trash2, Edit3, Loader2, Sparkles, ShieldCheck, Truck, Lock, Leaf, CheckCircle2, ChevronRight, ChevronLeft, Eye, Layers, Copy, Check, Save } from 'lucide-react';
 import { ppmpService, procurementConditionService, otherTermService } from '../../services/api';
 import { GreenSpecDropdown } from './GreenSpecDropdown';
 import {
@@ -12,6 +12,7 @@ import {
     canonicalizePaymentMethod,
     deduplicateOptions,
     findMatchingOption,
+    isDateScheduleString,
 } from '../../utils/procurementOptions';
 
 export const POL_TERMS_TEXT = `POL Condition:
@@ -44,6 +45,16 @@ export const getInitialAttachmentLists = (ppmp, procurementItems, savedData) => 
             ? `${itemAccountCode} / ${itemFundStr}`
             : (itemAccountCode || itemFundStr || '');
 
+        // Resolve contractual delivery period specification from PPMP or saved attachment list.
+        // Never fall back to item.delivery_period which holds the monthly schedule date (e.g. "10/2026").
+        let resolvedDeliveryPeriod = ppmp?.delivery_period || '30 Calendar Days upon receipt of PO';
+        const savedDeliveryPeriod = itemSaved?.delivery_period;
+        if (savedDeliveryPeriod && !isDateScheduleString(savedDeliveryPeriod) && savedDeliveryPeriod !== item.delivery_period) {
+            resolvedDeliveryPeriod = savedDeliveryPeriod;
+        } else if (ppmp?.delivery_period && !isDateScheduleString(ppmp.delivery_period)) {
+            resolvedDeliveryPeriod = ppmp.delivery_period;
+        }
+
         return {
             itemId: item.id !== undefined && item.id !== null ? item.id : idx,
             itemKey,
@@ -59,9 +70,9 @@ export const getInitialAttachmentLists = (ppmp, procurementItems, savedData) => 
             charges: itemSaved?.charges || defaultItemCharges,
             placeOfDelivery: itemSaved?.place_of_delivery || ppmp?.place_of_delivery || 'PGSO Warehouse/On-site',
             paymentMethod: itemSaved?.payment_method || ppmp?.payment_method || 'Staggered Delivery/Credit-basis',
-            deliveryPeriod: itemSaved?.delivery_period || item.delivery_period || ppmp?.delivery_period || '30 Calendar Days upon receipt of PO',
-            additionalCondition: itemSaved?.additional_condition || (idx === 0 ? (ppmp?.additional_condition || '') : ''),
-            otherTerms: itemSaved?.other_terms || (idx === 0 ? (ppmp?.warranty_and_other_terms || '') : ''),
+            deliveryPeriod: resolvedDeliveryPeriod,
+            additionalCondition: itemSaved?.additional_condition || ppmp?.additional_condition || '',
+            otherTerms: itemSaved?.other_terms || ppmp?.warranty_and_other_terms || '',
             selectedOtherTermId: '',
             rows: (itemSaved?.rows && Array.isArray(itemSaved.rows) && itemSaved.rows.length > 0)
                 ? itemSaved.rows.map(r => ({
@@ -207,6 +218,26 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, initialItem
         return () => { isMounted = false; };
     }, []);
 
+    // Sync delivery period preset if condition was selected on PPMP but was not yet saved or defaulted
+    useEffect(() => {
+        if (conditions.length > 0) {
+            setAttachmentLists(prev => prev.map(list => {
+                if (list.additionalCondition && (!list.deliveryPeriod || list.deliveryPeriod === '30 Calendar Days upon receipt of PO' || isDateScheduleString(list.deliveryPeriod))) {
+                    const matchedCond = conditions.find(c => c.name === list.additionalCondition);
+                    if (matchedCond?.delivery_period) {
+                        return {
+                            ...list,
+                            deliveryPeriod: matchedCond.delivery_period,
+                            placeOfDelivery: list.placeOfDelivery || matchedCond.place_of_delivery || 'PGSO Warehouse/On-site',
+                            paymentMethod: list.paymentMethod || matchedCond.payment_method || 'Staggered Delivery/Credit-basis',
+                        };
+                    }
+                }
+                return list;
+            }));
+        }
+    }, [conditions]);
+
     // Dropdown options
     const deliveryPeriodOptions = useMemo(() => {
         const pool = [...BASE_DELIVERY_PERIODS];
@@ -242,7 +273,7 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, initialItem
 
     const hasHeadApproved = Boolean(
         ppmp?.head_approved_at ||
-        !['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'].includes(ppmp?.status)
+        ppmp?.status === 'READY_TO_PRINT'
     );
     const headSig = hasHeadApproved
         ? (ppmp?.signatures?.find(s => s.role === 'head') || (isScopePpmpAppOnly ? ppmp?.parent?.signatures?.find(s => s.role === 'head') : null))
@@ -250,7 +281,7 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, initialItem
 
     const hasTwgApprovedChild = Boolean(
         ppmp?.twg_approved_at ||
-        (ppmp?.status === 'READY_TO_PRINT' && ppmp?.signatures?.some(s => s.role === 'twg'))
+        (['HEAD_PENDING', 'HEAD_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status) && ppmp?.signatures?.some(s => s.role === 'twg'))
     );
 
     const twgSig = isAttachmentAmended
@@ -464,16 +495,18 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, initialItem
         return match ? String(match.id) : 'CUSTOM';
     }, [activeList.selectedOtherTermId, activeList.otherTerms, otherTermsList]);
 
-    // Save & Generate
+    // Save Single Attachment
     const handleGenerate = async () => {
-        // Validate each attachment list has at least some item description
-        const missingAny = attachmentLists.some(l => !l.rows.some(r => (r.description && r.description.trim() !== '') || (r.qty && r.qty !== '')));
-        if (missingAny && attachmentLists.length > 1) {
-            const proceed = confirm('Some attachment lists have empty item breakdowns. Do you still want to proceed and generate the lists?');
-            if (!proceed) return;
+        // Validate active attachment list has at least some item description or quantity
+        const activeHasContent = activeList.rows && activeList.rows.some(r => (r.description && r.description.trim() !== '') || (r.qty && r.qty !== ''));
+        if (!activeHasContent) {
+            alert('Please add at least one item description or specification to this attachment list before saving.');
+            return;
         }
 
-        const allListsMap = {};
+        const allListsMap = {
+            ...(savedData?.attachment_lists || {}),
+        };
         attachmentLists.forEach(list => {
             allListsMap[list.itemKey] = {
                 office_name: list.officeName,
@@ -923,8 +956,8 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, initialItem
                                 onClick={handleGenerate}
                                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider rounded-lg shadow transition cursor-pointer disabled:opacity-50"
                             >
-                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                {saving ? 'Saving...' : (attachmentLists.length > 1 ? `Save & Generate All (${attachmentLists.length}) Lists` : 'Generate PPMP List of Attachment')}
+                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                {saving ? 'Saving...' : (attachmentLists.length > 1 ? `Save Attachment (Item ${activeList.itemNo || activeItemIndex + 1})` : 'Save Attachment')}
                             </button>
                         </div>
                     ) : (
@@ -1682,8 +1715,8 @@ export const PPMPAttachmentListView = ({ ppmp, user, canEdit = true, initialItem
                                 onClick={handleGenerate}
                                 className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold uppercase tracking-wider rounded-xl shadow-md transition cursor-pointer disabled:opacity-50"
                             >
-                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                                {saving ? 'Saving...' : (attachmentLists.length > 1 ? `Save & Generate All (${attachmentLists.length}) Lists` : 'Generate PPMP List of Attachment')}
+                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                {saving ? 'Saving...' : (attachmentLists.length > 1 ? `Save Attachment (Item ${activeList.itemNo || activeItemIndex + 1})` : 'Save Attachment')}
                             </button>
                         </div>
                     </div>

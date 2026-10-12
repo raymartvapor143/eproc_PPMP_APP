@@ -150,6 +150,12 @@ export const ppmpService = {
     uploadAttachment: (uuid, formData) => api.post(`/ppmps/${uuid}/attachments`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
     }),
+    updateAttachmentType: (uuid, attachment, type) => {
+        const attKey = (typeof attachment === 'object' && attachment !== null)
+            ? (attachment.encrypted_uuid || attachment.uuid)
+            : attachment;
+        return api.patch(`/ppmps/${uuid}/attachments/${attKey}/type`, { attachment_type: type });
+    },
     deleteAttachment: (uuid, attachment) => {
         const attKey = (typeof attachment === 'object' && attachment !== null)
             ? (attachment.encrypted_uuid || attachment.uuid)

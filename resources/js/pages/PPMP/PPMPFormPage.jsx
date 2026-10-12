@@ -3,6 +3,16 @@ import { ppmpService, procurementConditionService, otherTermService } from '../.
 import { ProcurementPlanTable } from '../../components/PPMP/ProcurementPlanTable';
 import { GreenSpecDropdown } from '../../components/PPMP/GreenSpecDropdown';
 import { ArrowLeft, Save, Send, AlertCircle, FileCheck, Truck, Sparkles, Lock, Leaf } from 'lucide-react';
+import {
+    BASE_DELIVERY_PERIODS,
+    BASE_PLACES_OF_DELIVERY,
+    BASE_PAYMENT_METHODS,
+    canonicalizeDeliveryPeriod,
+    canonicalizePlaceOfDelivery,
+    canonicalizePaymentMethod,
+    deduplicateOptions,
+    findMatchingOption,
+} from '../../utils/procurementOptions';
 
 export const POL_TERMS_TEXT = `POL Condition:
 -Staggered Delivery based on the latest fuel pump price /At Gasoline Station
@@ -23,6 +33,7 @@ export const PPMPFormPage = ({ user, initialPpmp = null, initialSourceOfFund = '
     const [fiscalYear, setFiscalYear] = useState(initialPpmp?.fiscal_year || new Date().getFullYear().toString());
     const [planType, setPlanType] = useState(initialPpmp?.plan_type || 'INDICATIVE');
     const [implementingUnit, setImplementingUnit] = useState(initialPpmp?.implementing_unit || initialPpmp?.office?.name || '');
+    const [programName, setProgramName] = useState(initialPpmp?.program_name || '');
     const [deliveryPeriod, setDeliveryPeriod] = useState(initialPpmp?.delivery_period || '');
     const [placeOfDelivery, setPlaceOfDelivery] = useState(initialPpmp?.place_of_delivery || '');
     const [paymentMethod, setPaymentMethod] = useState(initialPpmp?.payment_method || '');
@@ -160,47 +171,27 @@ export const PPMPFormPage = ({ user, initialPpmp = null, initialSourceOfFund = '
     };
 
     const deliveryPeriodOptions = useMemo(() => {
-        const set = new Set([
-            'Date of Activity',
-            'As Per Demand by the End-User',
-            'Staggered Delivery based on the latest fuel pump price /At Gasoline Station',
-            "1st Delivery 10 calendar days upon receipt of P.O\n-Succeeding deliveries: upon request of the end-user or as per empty gallon",
-            'On the Schedule date',
-            '30 Calendar Days upon receipt of PO',
-            '15 Calendar Days upon receipt of PO',
-            '7 Calendar Days upon receipt of PO',
-            'As scheduled',
-        ]);
+        const pool = [...BASE_DELIVERY_PERIODS];
         conditions.forEach(c => {
-            if (c.delivery_period) set.add(c.delivery_period);
+            if (c.delivery_period) pool.push(c.delivery_period);
         });
-        return Array.from(set);
+        return deduplicateOptions(pool, canonicalizeDeliveryPeriod);
     }, [conditions]);
 
     const placeOfDeliveryOptions = useMemo(() => {
-        const set = new Set([
-            'PGSO Warehouse/On-site',
-            'PGSO Warehouse - onsite',
-            'At Gasoline Station',
-        ]);
+        const pool = [...BASE_PLACES_OF_DELIVERY];
         conditions.forEach(c => {
-            if (c.place_of_delivery) set.add(c.place_of_delivery);
+            if (c.place_of_delivery) pool.push(c.place_of_delivery);
         });
-        return Array.from(set);
+        return deduplicateOptions(pool, canonicalizePlaceOfDelivery);
     }, [conditions]);
 
     const paymentMethodOptions = useMemo(() => {
-        const set = new Set([
-            'Staggered Delivery/Credit-basis',
-            'Staggered Payment: The end-user must ensure that payment is processed within 10 calendar days upon receiving the billing from the supplier/Credit-basis.',
-            'Staggered Payment/Credit-basis',
-            'One-time Payment/cash-basis',
-            'One-time Payment - Credit basis',
-        ]);
+        const pool = [...BASE_PAYMENT_METHODS];
         conditions.forEach(c => {
-            if (c.payment_method) set.add(c.payment_method);
+            if (c.payment_method) pool.push(c.payment_method);
         });
-        return Array.from(set);
+        return deduplicateOptions(pool, canonicalizePaymentMethod);
     }, [conditions]);
 
     const defaultFund = initialPpmp?.source_of_fund || initialSourceOfFund || 'General Fund and etc..';
@@ -378,6 +369,7 @@ export const PPMPFormPage = ({ user, initialPpmp = null, initialSourceOfFund = '
             fiscal_year: fiscalYear,
             plan_type: planType,
             implementing_unit: implementingUnit.trim(),
+            program_name: programName ? programName.trim() : null,
             delivery_period: isPolCondition ? '' : deliveryPeriod,
             place_of_delivery: isPolCondition ? '' : placeOfDelivery,
             payment_method: isPolCondition ? '' : paymentMethod,
@@ -684,7 +676,7 @@ export const PPMPFormPage = ({ user, initialPpmp = null, initialSourceOfFund = '
                             </div>
                             <select
                                 disabled={isPolCondition}
-                                value={isPolCondition ? '' : (deliveryPeriodOptions.includes(deliveryPeriod) ? deliveryPeriod : 'CUSTOM')}
+                                value={isPolCondition ? '' : (findMatchingOption(deliveryPeriod, deliveryPeriodOptions, canonicalizeDeliveryPeriod) || (deliveryPeriod ? 'CUSTOM' : ''))}
                                 onChange={(e) => {
                                     if (e.target.value !== 'CUSTOM') {
                                         setDeliveryPeriod(e.target.value);
@@ -730,7 +722,7 @@ export const PPMPFormPage = ({ user, initialPpmp = null, initialSourceOfFund = '
                             </div>
                             <select
                                 disabled={isPolCondition}
-                                value={isPolCondition ? '' : (placeOfDeliveryOptions.includes(placeOfDelivery) ? placeOfDelivery : 'CUSTOM')}
+                                value={isPolCondition ? '' : (findMatchingOption(placeOfDelivery, placeOfDeliveryOptions, canonicalizePlaceOfDelivery) || (placeOfDelivery ? 'CUSTOM' : ''))}
                                 onChange={(e) => {
                                     if (e.target.value !== 'CUSTOM') {
                                         setPlaceOfDelivery(e.target.value);
@@ -776,7 +768,7 @@ export const PPMPFormPage = ({ user, initialPpmp = null, initialSourceOfFund = '
                             </div>
                             <select
                                 disabled={isPolCondition}
-                                value={isPolCondition ? '' : (paymentMethodOptions.includes(paymentMethod) ? paymentMethod : 'CUSTOM')}
+                                value={isPolCondition ? '' : (findMatchingOption(paymentMethod, paymentMethodOptions, canonicalizePaymentMethod) || (paymentMethod ? 'CUSTOM' : ''))}
                                 onChange={(e) => {
                                     if (e.target.value !== 'CUSTOM') {
                                         setPaymentMethod(e.target.value);
@@ -898,6 +890,8 @@ export const PPMPFormPage = ({ user, initialPpmp = null, initialSourceOfFund = '
                     totalBudget={totalBudget}
                     accountCode={accountCode}
                     onAccountCodeChange={setAccountCode}
+                    programName={programName}
+                    onProgramNameChange={setProgramName}
                 />
             </div>
         </form>

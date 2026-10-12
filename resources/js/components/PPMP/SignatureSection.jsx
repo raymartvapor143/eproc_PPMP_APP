@@ -12,19 +12,19 @@ export const SignatureSection = ({ ppmp, isPrintMode = false }) => {
     // Reviewer signatures require review approval before their initial/signature is valid
     const hasHeadApproved = Boolean(
         ppmp?.head_approved_at ||
-        !['DRAFT', 'HEAD_PENDING', 'HEAD_RETURNED'].includes(ppmp?.status)
+        ppmp?.status === 'READY_TO_PRINT'
     );
-    const hasBudgetApproved = Boolean(
-        ppmp?.budget_approved_at ||
-        ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
+    const hasTwgApproved = Boolean(
+        ppmp?.twg_approved_at ||
+        ['HEAD_PENDING', 'HEAD_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
     );
     const hasOppmoApproved = Boolean(
         ppmp?.oppmo_approved_at ||
-        ['TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
+        ['TWG_REVIEW', 'TWG_RETURNED', 'HEAD_PENDING', 'HEAD_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
     );
-    const hasTwgApproved = Boolean(
-        ppmp?.ready_to_print_at ||
-        ppmp?.status === 'READY_TO_PRINT'
+    const hasBudgetApproved = Boolean(
+        ppmp?.budget_approved_at ||
+        ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'TWG_RETURNED', 'HEAD_PENDING', 'HEAD_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
     );
 
     const isTrustFund = Boolean(
@@ -34,7 +34,7 @@ export const SignatureSection = ({ ppmp, isPrintMode = false }) => {
 
     const hasPaccoApproved = Boolean(
         ppmp?.pacco_approved_at ||
-        ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'TWG_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
+        ['OPPMO_REVIEW', 'OPPMO_RETURNED', 'TWG_REVIEW', 'TWG_RETURNED', 'HEAD_PENDING', 'HEAD_RETURNED', 'READY_TO_PRINT'].includes(ppmp?.status)
     );
 
     // Signatures mapping

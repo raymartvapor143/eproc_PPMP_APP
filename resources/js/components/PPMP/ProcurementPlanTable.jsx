@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatCurrency } from '../UI/StatusBadge';
 import { Plus, Trash2 } from 'lucide-react';
 
@@ -214,11 +214,20 @@ export const ProcurementPlanTable = ({
     totalBudget = 0,
     accountCode = '',
     onAccountCodeChange,
+    programName = '',
+    onProgramNameChange,
     deliveryPeriod = '',
     placeOfDelivery = '',
     paymentMethod = '',
     warrantyAndOtherTerms = '',
 }) => {
+    const [showProgramInput, setShowProgramInput] = useState(Boolean(programName && String(programName).trim()));
+
+    useEffect(() => {
+        if (programName && String(programName).trim()) {
+            setShowProgramInput(true);
+        }
+    }, [programName]);
 
     return (
         <div className="mt-4">
@@ -281,7 +290,46 @@ export const ProcurementPlanTable = ({
                         <tr className="bg-slate-50 font-bold border-b border-slate-300 divide-x divide-slate-300">
                             <td className="p-2 font-bold uppercase tracking-wide text-slate-900 bg-slate-50">
                                 {isEditable ? (
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-col gap-2">
+                                        {/* Program Name Input Section */}
+                                        {!showProgramInput ? (
+                                            <div className="flex justify-center">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowProgramInput(true)}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-300 rounded shadow-2xs transition cursor-pointer"
+                                                    title="Click to input Program Name"
+                                                >
+                                                    <Plus className="w-3.5 h-3.5" />
+                                                    Program Name
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-1 bg-blue-50/60 p-2 rounded-md border border-blue-200">
+                                                <div className="flex items-center justify-between text-[10px] font-bold text-blue-900 px-0.5">
+                                                    <span>Program Name:</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (onProgramNameChange) onProgramNameChange('');
+                                                            setShowProgramInput(false);
+                                                        }}
+                                                        className="text-[10px] text-rose-600 hover:text-rose-800 font-semibold px-1 rounded hover:bg-rose-50 cursor-pointer"
+                                                        title="Remove Program Name"
+                                                    >
+                                                        ✕ Remove
+                                                    </button>
+                                                </div>
+                                                <textarea
+                                                    value={programName || ''}
+                                                    onChange={(e) => onProgramNameChange && onProgramNameChange(e.target.value)}
+                                                    rows={2}
+                                                    placeholder="Input Program Name here..."
+                                                    className="w-full text-[11px] p-2 font-bold text-center border border-blue-300 rounded bg-white text-blue-950 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 leading-snug resize-y placeholder:font-normal placeholder:italic placeholder:text-slate-400"
+                                                />
+                                            </div>
+                                        )}
+
                                         <textarea
                                             value={(accountCode !== undefined && accountCode !== null && onAccountCodeChange ? accountCode : (items.find(i => i.is_header)?.description || '')) || ''}
                                             onChange={(e) => {
@@ -302,6 +350,11 @@ export const ProcurementPlanTable = ({
                                     </div>
                                 ) : (
                                     <div className="font-extrabold text-slate-900 text-[11px] text-center whitespace-pre-wrap leading-tight py-1">
+                                        {programName && (
+                                            <div className="font-bold text-blue-900 text-[11px] underline mb-1 whitespace-pre-wrap">
+                                                {formatDescription6Words(programName)}
+                                            </div>
+                                        )}
                                         {formatDescription6Words(accountCode || items.find(i => i.is_header)?.description || '')}
                                     </div>
                                 )}

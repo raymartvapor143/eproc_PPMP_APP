@@ -16,6 +16,7 @@ class Ppmp extends Model
         'ppmp_number',
         'office_id',
         'implementing_unit',
+        'program_name',
         'created_by',
         'title',
         'source_of_fund',
@@ -111,7 +112,85 @@ class Ppmp extends Model
         return $this->items()->where('source_of_fund', 'like', '%trust%')->exists();
     }
 
-    protected $appends = ['default_signatories'];
+    protected $appends = ['default_signatories', 'pre_submission_checks'];
+
+    public function hasAppGenerated(): bool
+    {
+        if (!empty($this->app_data) && is_array($this->app_data)) {
+            if (!empty($this->app_data['rows']) || !empty($this->app_data['is_generated']) || !empty($this->app_data['saved_at']) || count($this->app_data) > 0) {
+                return true;
+            }
+        }
+
+        $atts = $this->relationLoaded('attachments') ? $this->attachments : $this->attachments()->get();
+        return $atts->contains(function ($att) {
+            $filename = $att->original_filename ?? $att->file_name ?? '';
+            $isPdf = ($att->mime_type === 'application/pdf') || str_ends_with(strtolower($filename), '.pdf');
+            return $isPdf && ($att->attachment_type === 'APP_DOCUMENT' || stripos($filename, 'app') !== false);
+        });
+    }
+
+    public function hasAttachmentListGenerated(): bool
+    {
+        if (!empty($this->attachment_list_data) && is_array($this->attachment_list_data)) {
+            if (!empty($this->attachment_list_data['rows']) || !empty($this->attachment_list_data['attachment_lists']) || !empty($this->attachment_list_data['is_generated']) || !empty($this->attachment_list_data['saved_at']) || count($this->attachment_list_data) > 0) {
+                return true;
+            }
+        }
+
+        $atts = $this->relationLoaded('attachments') ? $this->attachments : $this->attachments()->get();
+        return $atts->contains(function ($att) {
+            $filename = $att->original_filename ?? $att->file_name ?? '';
+            $isPdf = ($att->mime_type === 'application/pdf') || str_ends_with(strtolower($filename), '.pdf');
+            return $isPdf && ($att->attachment_type === 'ATTACHMENT_LIST_DOC' || stripos($filename, 'attachment') !== false);
+        });
+    }
+
+    public function hasMarketScopingPdf(): bool
+    {
+        $atts = $this->relationLoaded('attachments') ? $this->attachments : $this->attachments()->get();
+
+        if ($atts->isEmpty() && $this->parent_id) {
+            $ancestorIds = [];
+            $curr = $this->parent;
+            while ($curr && count($ancestorIds) < 10) {
+                $ancestorIds[] = $curr->id;
+                $curr = $curr->parent;
+            }
+            if (!empty($ancestorIds)) {
+                $atts = PpmpAttachment::whereIn('ppmp_id', $ancestorIds)->get();
+            }
+        }
+
+        return $atts->contains(function ($att) {
+            $filename = $att->original_filename ?? $att->file_name ?? '';
+            $isPdf = ($att->mime_type === 'application/pdf') || str_ends_with(strtolower($filename), '.pdf');
+            if (!$isPdf) return false;
+
+            if ($att->attachment_type === 'MARKET_SCOPING') {
+                return true;
+            }
+
+            $fname = strtolower($filename);
+            return str_contains($fname, 'market') || str_contains($fname, 'scoping');
+        });
+    }
+
+    public function getPreSubmissionChecksAttribute(): array
+    {
+        $app = $this->hasAppGenerated();
+        $attachmentList = $this->hasAttachmentListGenerated();
+        $marketScoping = $this->hasMarketScopingPdf();
+        $isReady = $app && $attachmentList && $marketScoping;
+
+        return [
+            'app_generated' => $app,
+            'attachment_list_generated' => $attachmentList,
+            'market_scoping_attached' => $marketScoping,
+            'can_submit' => $isReady,
+            'is_ready' => $isReady,
+        ];
+    }
 
     public function getDefaultSignatoriesAttribute(): array
     {

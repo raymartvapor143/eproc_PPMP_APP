@@ -17,6 +17,7 @@ import {
     Edit3,
     Printer,
     CheckCircle,
+    AlertCircle,
     Building2,
     Calendar,
     Coins,
@@ -194,13 +195,31 @@ export const PPMPDetailPage = ({
 
     const hasAttachmentList = Boolean(
         ppmp?.attachment_list_data ||
+        ppmp?.pre_submission_checks?.attachment_list_generated ||
         localStorage.getItem(`ppmp_attachment_generated_${ppmp?.uuid}`)
     );
 
     const hasApp = Boolean(
         ppmp?.app_data ||
+        ppmp?.pre_submission_checks?.app_generated ||
         localStorage.getItem(`ppmp_app_generated_${ppmp?.uuid}`)
     );
+
+    const hasMarketScoping = Boolean(
+        ppmp?.pre_submission_checks?.market_scoping_attached ??
+        (ppmp?.attachments || []).some(a =>
+            (a.attachment_type === 'MARKET_SCOPING' ||
+             (a.file_name && /market.*scoping|scoping/i.test(a.file_name))) &&
+            (a.mime_type === 'application/pdf' || (a.file_name && a.file_name.toLowerCase().endsWith('.pdf')))
+        )
+    );
+
+    const preSubmissionStatus = {
+        hasApp: Boolean(ppmp?.pre_submission_checks?.app_generated ?? hasApp),
+        hasAttachmentList: Boolean(ppmp?.pre_submission_checks?.attachment_list_generated ?? hasAttachmentList),
+        hasMarketScoping: hasMarketScoping,
+    };
+    const isPreSubmissionReady = preSubmissionStatus.hasApp && preSubmissionStatus.hasAttachmentList && preSubmissionStatus.hasMarketScoping;
 
     const isCreator = ppmp.created_by === user.id;
     const isReadyToPrint = ppmp.status === 'READY_TO_PRINT';
@@ -214,14 +233,17 @@ export const PPMPDetailPage = ({
         (user.role === 'twg' && ppmp.status === 'TWG_REVIEW')
     );
 
-    // End user submission permissions
-    const canSubmitToHead = isCreator && (ppmp.status === 'DRAFT' || ppmp.status === 'HEAD_RETURNED');
+    // End user submission permissions:
+    // Flow: Budget / PACCO -> OPPMO -> TWG -> Office Head -> Ready to Print
+    const canSubmitToHead = false;
     const canSubmitForReview = isCreator && (
-        ppmp.status === 'HEAD_APPROVED' ||
+        ppmp.status === 'DRAFT' ||
+        ppmp.status === 'HEAD_RETURNED' ||
         ppmp.status === 'BUDGET_OFFICER_RETURNED' ||
         ppmp.status === 'PACCO_RETURNED' ||
         ppmp.status === 'OPPMO_RETURNED' ||
-        ppmp.status === 'TWG_RETURNED'
+        ppmp.status === 'TWG_RETURNED' ||
+        ppmp.status === 'HEAD_APPROVED'
     );
 
     const canEdit = (isCreator && [
@@ -343,6 +365,9 @@ export const PPMPDetailPage = ({
                 return 'the BAC-TWG';
             case 'BUDGET_OFFICER_RETURNED':
                 return 'the Provincial Budget Officer';
+            case 'HEAD_RETURNED':
+                return 'the Office Head';
+            case 'DRAFT':
             case 'HEAD_APPROVED':
             default:
                 return isTrustFund ? 'the PACCO Reviewer' : 'the Provincial Budget Officer';
@@ -355,10 +380,34 @@ export const PPMPDetailPage = ({
             return;
         }
 
+        // Validate Pre-Submission Requirements before submitting to the first reviewer
+        const missingRequirements = [];
+        if (!preSubmissionStatus.hasApp) {
+            missingRequirements.push('• Annual Procurement Plan (APP) must already be generated.');
+        }
+        if (!preSubmissionStatus.hasAttachmentList) {
+            missingRequirements.push('• PPMP List of Attachment must already be generated.');
+        }
+        if (!preSubmissionStatus.hasMarketScoping) {
+            missingRequirements.push('• Market Scoping PDF document must already be uploaded and attached.');
+        }
+
+        if (missingRequirements.length > 0) {
+            alert(
+                'Submission Incomplete:\n\n' +
+                'Before submitting this PPMP to the reviewer, the following requirements must be completed:\n\n' +
+                missingRequirements.join('\n') +
+                '\n\nPlease generate the required documents and attach the Market Scoping PDF before submitting.'
+            );
+            return;
+        }
+
         const targetReviewer = getReviewTargetName(ppmp.status);
-        const confirmMsg = ppmp.status === 'HEAD_APPROVED'
+        const confirmMsg = ppmp.status === 'DRAFT'
             ? `Submit this PPMP for formal government procurement review? This will route directly to ${targetReviewer}.`
-            : `Resubmit this PPMP for review? This will route directly to ${targetReviewer}.`;
+            : (ppmp.status === 'HEAD_RETURNED'
+                ? `Resubmit this PPMP to the Office Head for endorsement?`
+                : `Resubmit this PPMP for review? This will route directly to ${targetReviewer}.`);
 
         if (!window.confirm(confirmMsg)) return;
         setSubmitting(true);
@@ -612,31 +661,15 @@ export const PPMPDetailPage = ({
                         )
                     )}
 
-                    {canSubmitToHead && (
-                        <button
-                            disabled={submitting}
-                            onClick={handleSubmitToHead}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm transition disabled:opacity-50 cursor-pointer"
-                        >
-                            {submitting ? (
-                                <>
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                    <span>Submitting...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Send className="w-4 h-4" />
-                                    <span>Submit to Head</span>
-                                </>
-                            )}
-                        </button>
-                    )}
-
                     {canSubmitForReview && (
                         <button
                             disabled={submitting}
                             onClick={handleSubmitForReview}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm transition disabled:opacity-50 cursor-pointer"
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider shadow-sm transition disabled:opacity-50 cursor-pointer ${
+                                isPreSubmissionReady
+                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                    : 'bg-indigo-500 hover:bg-indigo-600 text-white'
+                            }`}
                         >
                             {submitting ? (
                                 <>
@@ -646,13 +679,129 @@ export const PPMPDetailPage = ({
                             ) : (
                                 <>
                                     <Send className="w-4 h-4" />
-                                    <span>{ppmp.status === 'HEAD_APPROVED' ? 'Submit for Review' : `Resubmit to ${getReviewTargetName(ppmp.status).replace(/^the\s+/i, '')}`}</span>
+                                    <span>
+                                        {ppmp.status === 'DRAFT'
+                                            ? 'Submit for Review'
+                                            : (ppmp.status === 'HEAD_RETURNED'
+                                                ? 'Resubmit to Office Head'
+                                                : `Resubmit to ${getReviewTargetName(ppmp.status).replace(/^the\s+/i, '')}`)}
+                                    </span>
                                 </>
                             )}
                         </button>
                     )}
                 </div>
             </div>
+
+            {/* Mandatory Pre-Submission Checklist Banner for DRAFT and Returned States */}
+            {canSubmitForReview && ['DRAFT', 'HEAD_RETURNED', 'BUDGET_OFFICER_RETURNED', 'PACCO_RETURNED', 'OPPMO_RETURNED', 'TWG_RETURNED'].includes(ppmp.status) && (
+                <div className={`rounded-xl border-2 p-4 shadow-xs transition ${
+                    isPreSubmissionReady
+                        ? 'bg-emerald-50/80 border-emerald-300'
+                        : 'bg-amber-50/80 border-amber-300'
+                }`}>
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                            <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+                                isPreSubmissionReady ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                            }`}>
+                                {isPreSubmissionReady ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="text-sm font-bold text-slate-900">
+                                        Pre-Submission Document Checklist
+                                    </h4>
+                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                                        isPreSubmissionReady ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-amber-100 text-amber-800 border border-amber-300'
+                                    }`}>
+                                        {isPreSubmissionReady ? 'Ready for Review' : 'Action Required Before Submission'}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-600 mt-0.5">
+                                    {isPreSubmissionReady
+                                        ? 'All mandatory forms and scoping documents are generated and attached. You may now submit for formal review.'
+                                        : 'Before submitting to the reviewer, the APP and PPMP List of Attachment must be generated, and the Market Scoping PDF must be attached.'}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Checklist items */}
+                        <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-200/60">
+                            {/* 1. APP */}
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
+                                preSubmissionStatus.hasApp
+                                    ? 'bg-emerald-100/60 border-emerald-300 text-emerald-800'
+                                    : 'bg-white border-amber-300 text-amber-900'
+                            }`}>
+                                {preSubmissionStatus.hasApp ? (
+                                    <>
+                                        <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                                        <span>APP Generated</span>
+                                    </>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAppView(true)}
+                                        className="text-amber-700 font-bold hover:underline cursor-pointer flex items-center gap-1.5"
+                                        title="Click to generate Annual Procurement Plan"
+                                    >
+                                        <FileText className="w-3.5 h-3.5 text-amber-600" />
+                                        <span>Generate APP</span>
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* 2. PPMP List of Attachment */}
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
+                                preSubmissionStatus.hasAttachmentList
+                                    ? 'bg-emerald-100/60 border-emerald-300 text-emerald-800'
+                                    : 'bg-white border-amber-300 text-amber-900'
+                            }`}>
+                                {preSubmissionStatus.hasAttachmentList ? (
+                                    <>
+                                        <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                                        <span>Attachment List Generated</span>
+                                    </>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSelectedAttachmentItemId(null);
+                                            setIsAttachmentListView(true);
+                                        }}
+                                        className="text-amber-700 font-bold hover:underline cursor-pointer flex items-center gap-1.5"
+                                        title="Click to generate PPMP List of Attachment"
+                                    >
+                                        <FileSpreadsheet className="w-3.5 h-3.5 text-amber-600" />
+                                        <span>Generate Attachment List</span>
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* 3. Market Scoping PDF */}
+                            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border ${
+                                preSubmissionStatus.hasMarketScoping
+                                    ? 'bg-emerald-100/60 border-emerald-300 text-emerald-800'
+                                    : 'bg-white border-amber-300 text-amber-900'
+                            }`}>
+                                {preSubmissionStatus.hasMarketScoping ? (
+                                    <>
+                                        <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                                        <span>Market Scoping PDF Attached</span>
+                                    </>
+                                ) : (
+                                    <span className="text-amber-800 font-bold flex items-center gap-1.5">
+                                        <FileUp className="w-3.5 h-3.5 text-amber-600" />
+                                        <span>Attach Market Scoping PDF</span>
+                                        <span className="text-[10px] bg-rose-100 text-rose-800 px-1 py-0.5 rounded font-bold uppercase">Required</span>
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Pending Receipt Alert Banner if current actor hasn't received the incoming document */}
             {isAwaitingReceive(ppmp, user) && (
@@ -913,6 +1062,7 @@ export const PPMPDetailPage = ({
                             isEditable={false}
                             totalBudget={ppmp.total_budget}
                             accountCode={ppmp.account_code}
+                            programName={ppmp.program_name}
                             deliveryPeriod={ppmp.delivery_period}
                             placeOfDelivery={ppmp.place_of_delivery}
                             paymentMethod={ppmp.payment_method}
@@ -1059,6 +1209,7 @@ export const PPMPDetailPage = ({
                                                     isEditable={false}
                                                     totalBudget={histPpmp.total_budget}
                                                     accountCode={histPpmp.account_code}
+                                                    programName={histPpmp.program_name}
                                                     deliveryPeriod={histPpmp.delivery_period}
                                                     placeOfDelivery={histPpmp.place_of_delivery}
                                                     paymentMethod={histPpmp.payment_method}
@@ -1481,6 +1632,7 @@ export const PPMPDetailPage = ({
                                     isEditable={false}
                                     totalBudget={ppmp.total_budget}
                                     accountCode={ppmp.account_code}
+                                    programName={ppmp.program_name}
                                     deliveryPeriod={ppmp.delivery_period}
                                     placeOfDelivery={ppmp.place_of_delivery}
                                     paymentMethod={ppmp.payment_method}
@@ -1666,6 +1818,7 @@ export const PPMPDetailPage = ({
                                     isEditable={false}
                                     totalBudget={selectedReviewPpmp.total_budget}
                                     accountCode={selectedReviewPpmp.account_code}
+                                    programName={selectedReviewPpmp.program_name}
                                     deliveryPeriod={selectedReviewPpmp.delivery_period}
                                     placeOfDelivery={selectedReviewPpmp.place_of_delivery}
                                     paymentMethod={selectedReviewPpmp.payment_method}
