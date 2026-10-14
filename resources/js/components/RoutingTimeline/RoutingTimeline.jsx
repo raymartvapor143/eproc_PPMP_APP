@@ -4,11 +4,13 @@ import { Clock, ExternalLink, X, ChevronRight, History, Printer } from 'lucide-r
 
 /**
  * Returns accurate recipient / next office information strictly following the official PPMP route flow:
- * 1. End User -> Office Head (head)
- * 2. Office Head -> PACCO Reviewer (pacco) [Trust Fund] OR Provincial Budget Officer (budget_officer) [General Fund] OR BAC-TWG (twg) [Attachment Only]
- * 3. PACCO / Budget Officer -> OPPMO (oppmo)
- * 4. OPPMO -> BAC-TWG (twg) [or End User if PPMP_APP only]
- * 5. BAC-TWG -> Implementing Unit / End User (end_user) [Ready to Print / Final Approval]
+ * 1. End User creates Draft (DRAFT_CREATED) & prepares requirements (APP, Attachment List, Market Scoping PDF)
+ * 2. End User submits for review -> Provincial Budget Officer (General Fund) OR PACCO (Trust Fund) OR BAC-TWG (Attachment List only)
+ * 3. Budget Officer / PACCO certifies & releases -> OPPMO
+ * 4. OPPMO approves & releases -> BAC-TWG (or Office Head if PPMP_APP only)
+ * 5. BAC-TWG conducts technical review & approves -> Office Head (Final Approval & Endorsement)
+ * 6. Office Head grants Final Approval (READY_TO_PRINT) -> Implementing Unit / End User
+ * 7. End User acknowledges & receives document for procurement execution
  */
 export const getAccurateRouteRecipient = (route, ppmp) => {
     if (!route) return { name: '—', role: '', designation: '' };
@@ -21,31 +23,8 @@ export const getAccurateRouteRecipient = (route, ppmp) => {
     const isAttachOnly = ppmp?.amendment_scope === 'ATTACHMENT_LIST';
     const isPpmpAppOnly = ppmp?.amendment_scope === 'PPMP_APP';
 
-    // Desk receipt steps or self-referential steps: determine next office in route flow
-    if (action === 'PACCO_RECEIVED' || action === 'BUDGET_RECEIVED') {
-        return {
-            name: 'OPPMO REVIEW',
-            role: 'oppmo',
-            designation: 'Provincial Procurement Management Office',
-        };
-    }
-
-    if (action === 'OPPMO_RECEIVED') {
-        if (isPpmpAppOnly) {
-            return {
-                name: ppmp?.creator?.name || 'Implementing Unit / End User',
-                role: 'end_user',
-                designation: ppmp?.creator?.designation || 'End User (Implementing Unit)',
-            };
-        }
-        return {
-            name: 'BAC-TWG',
-            role: 'twg',
-            designation: 'Bids and Awards Committee - Technical Working Group',
-        };
-    }
-
-    if (action === 'HEAD_RECEIVED' || action === 'HEAD_APPROVED') {
+    // 1. Initial Draft Created -> next reviewing office upon submission
+    if (action === 'DRAFT_CREATED') {
         if (isAttachOnly) {
             return {
                 name: 'BAC-TWG',
@@ -67,11 +46,73 @@ export const getAccurateRouteRecipient = (route, ppmp) => {
         };
     }
 
+    // 2. Desk receipt by Budget Officer or PACCO -> next office is OPPMO
+    if (action === 'PACCO_RECEIVED' || action === 'BUDGET_RECEIVED') {
+        return {
+            name: 'OPPMO REVIEW',
+            role: 'oppmo',
+            designation: 'Provincial Procurement Management Office',
+        };
+    }
+
+    // 3. Desk receipt by OPPMO -> next office is BAC-TWG (or Office Head if PPMP_APP only)
+    if (action === 'OPPMO_RECEIVED') {
+        if (isPpmpAppOnly) {
+            return {
+                name: ppmp?.office?.head?.name || 'Office Head',
+                role: 'head',
+                designation: ppmp?.office?.head?.designation || 'Office Head / Implementing Unit Head',
+            };
+        }
+        return {
+            name: 'BAC-TWG',
+            role: 'twg',
+            designation: 'Bids and Awards Committee - Technical Working Group',
+        };
+    }
+
+    // 4. Desk receipt by BAC-TWG -> next office is Office Head for final approval
     if (action === 'TWG_RECEIVED') {
+        return {
+            name: ppmp?.office?.head?.name || 'Office Head',
+            role: 'head',
+            designation: ppmp?.office?.head?.designation || 'Office Head / Implementing Unit Head (Final Endorsement)',
+        };
+    }
+
+    // 5. Desk receipt by Office Head -> next recipient is End User (Ready to Print)
+    if (action === 'HEAD_RECEIVED') {
         return {
             name: ppmp?.creator?.name || 'Implementing Unit / End User',
             role: 'end_user',
-            designation: ppmp?.creator?.designation || 'End User (Implementing Unit - Technical Clearance)',
+            designation: ppmp?.creator?.designation || 'End User (Implementing Unit - Ready to Print)',
+        };
+    }
+
+    // 6. BAC-TWG Approved -> routed to Office Head
+    if (action === 'TWG_APPROVED') {
+        return {
+            name: ppmp?.office?.head?.name || 'Office Head',
+            role: 'head',
+            designation: ppmp?.office?.head?.designation || 'Office Head / Implementing Unit Head',
+        };
+    }
+
+    // 7. Office Head Approved or Ready to Print -> released to Implementing Unit / End User
+    if (action === 'HEAD_APPROVED' || action === 'READY_TO_PRINT') {
+        return {
+            name: ppmp?.creator?.name || 'Implementing Unit / End User',
+            role: 'end_user',
+            designation: ppmp?.creator?.designation || 'End User (Implementing Unit)',
+        };
+    }
+
+    // 8. End User Acknowledged
+    if (action === 'END_USER_RECEIVED') {
+        return {
+            name: ppmp?.creator?.name || 'Implementing Unit / End User',
+            role: 'end_user',
+            designation: ppmp?.creator?.designation || 'End User (Document Released & Active)',
         };
     }
 
@@ -83,19 +124,52 @@ export const getAccurateRouteRecipient = (route, ppmp) => {
         };
     }
 
-    if (action === 'DRAFT_CREATED') {
-        return {
-            name: ppmp?.office?.head?.name || 'Office Head',
-            role: 'head',
-            designation: ppmp?.office?.head?.designation || 'Office Head / Implementing Unit Head',
-        };
-    }
-
+    // Role-based fallbacks for to_role:
     if (route.to_role === 'pacco') {
         return {
             name: (route.to_user?.name && route.to_user.name !== 'PACCO Reviewer') ? route.to_user.name : (ppmp?.default_signatories?.pacco_requirement?.name || 'MAY FERNANDO-UY, CPA'),
             role: 'pacco',
             designation: (route.to_user?.designation && route.to_user.designation !== 'Provincial Accounting Reviewer') ? route.to_user.designation : (ppmp?.default_signatories?.pacco_requirement?.position || 'Provincial Accountant'),
+        };
+    }
+
+    if (route.to_role === 'budget_officer') {
+        return {
+            name: route.to_user?.name || ppmp?.default_signatories?.budget_requirement?.name || 'Provincial Budget Officer',
+            role: 'budget_officer',
+            designation: route.to_user?.designation || ppmp?.default_signatories?.budget_requirement?.position || 'Provincial Budget Office',
+        };
+    }
+
+    if (route.to_role === 'oppmo') {
+        return {
+            name: route.to_user?.name || 'Provincial Procurement Management Office (OPPMO)',
+            role: 'oppmo',
+            designation: route.to_user?.designation || 'OPPMO Reviewer',
+        };
+    }
+
+    if (route.to_role === 'twg') {
+        return {
+            name: route.to_user?.name || 'BAC - Technical Working Group',
+            role: 'twg',
+            designation: route.to_user?.designation || 'Bids and Awards Committee - Technical Working Group',
+        };
+    }
+
+    if (route.to_role === 'head') {
+        return {
+            name: route.to_user?.name || ppmp?.office?.head?.name || 'Office Head',
+            role: 'head',
+            designation: route.to_user?.designation || ppmp?.office?.head?.designation || 'Office Head / Implementing Unit Head',
+        };
+    }
+
+    if (route.to_role === 'end_user') {
+        return {
+            name: route.to_user?.name || ppmp?.creator?.name || 'Implementing Unit / End User',
+            role: 'end_user',
+            designation: route.to_user?.designation || ppmp?.creator?.designation || 'End User (Implementing Unit)',
         };
     }
 
@@ -115,6 +189,46 @@ export const getAccurateRouteOrigin = (route, ppmp) => {
             name: (route.from_user?.name && route.from_user.name !== 'PACCO Reviewer') ? route.from_user.name : (ppmp?.default_signatories?.pacco_requirement?.name || 'MAY FERNANDO-UY, CPA'),
             role: 'pacco',
             designation: (route.from_user?.designation && route.from_user.designation !== 'Provincial Accounting Reviewer') ? route.from_user.designation : (ppmp?.default_signatories?.pacco_requirement?.position || 'Provincial Accountant'),
+        };
+    }
+
+    if (route.from_role === 'budget_officer') {
+        return {
+            name: route.from_user?.name || ppmp?.default_signatories?.budget_requirement?.name || 'Provincial Budget Officer',
+            role: 'budget_officer',
+            designation: route.from_user?.designation || ppmp?.default_signatories?.budget_requirement?.position || 'Provincial Budget Office',
+        };
+    }
+
+    if (route.from_role === 'oppmo') {
+        return {
+            name: route.from_user?.name || 'Provincial Procurement Management Office (OPPMO)',
+            role: 'oppmo',
+            designation: route.from_user?.designation || 'OPPMO Reviewer',
+        };
+    }
+
+    if (route.from_role === 'twg') {
+        return {
+            name: route.from_user?.name || 'BAC - Technical Working Group',
+            role: 'twg',
+            designation: route.from_user?.designation || 'Bids and Awards Committee - Technical Working Group',
+        };
+    }
+
+    if (route.from_role === 'head') {
+        return {
+            name: route.from_user?.name || ppmp?.office?.head?.name || 'Office Head',
+            role: 'head',
+            designation: route.from_user?.designation || ppmp?.office?.head?.designation || 'Office Head / Implementing Unit Head',
+        };
+    }
+
+    if (route.from_role === 'end_user') {
+        return {
+            name: route.from_user?.name || ppmp?.creator?.name || 'Implementing Unit / End User',
+            role: 'end_user',
+            designation: route.from_user?.designation || ppmp?.creator?.designation || 'End User (Implementing Unit)',
         };
     }
 
@@ -413,19 +527,25 @@ export const RoutingTimeline = ({
                                                 case 'SUBMITTED_TO_HEAD':
                                                     return 'Passed & Submitted to Office Head';
                                                 case 'HEAD_RECEIVED':
-                                                    return 'Received by Office Head (Awaiting Action)';
+                                                    return 'Received by Office Head (Awaiting Final Approval)';
                                                 case 'HEAD_APPROVED':
-                                                    return 'Office Head Endorsed & Approved';
+                                                    return 'Office Head Final Approved & Ready to Print';
                                                 case 'HEAD_RETURNED':
                                                     return 'Suspended & Returned by Office Head';
                                                 case 'SUBMITTED_FOR_REVIEW':
-                                                    return `Passed & Submitted to ${route.to_role ? route.to_role.replace(/_/g, ' ') : 'Reviewer'} for Review`;
+                                                    return `Passed & Submitted to ${route.to_role ? route.to_role.replace(/_/g, ' ').toUpperCase() : 'Reviewer'} for Review`;
                                                 case 'BUDGET_RECEIVED':
                                                     return 'Received by Provincial Budget Officer';
                                                 case 'BUDGET_APPROVED':
                                                     return 'Budget Certified & Released to OPPMO';
                                                 case 'BUDGET_RETURNED':
                                                     return 'Suspended & Returned by Budget Officer';
+                                                case 'PACCO_RECEIVED':
+                                                    return 'Received by Provincial Accountant (PACCO)';
+                                                case 'PACCO_APPROVED':
+                                                    return 'Accounting Requirements Certified & Released to OPPMO';
+                                                case 'PACCO_RETURNED':
+                                                    return 'Suspended & Returned by PACCO Reviewer';
                                                 case 'OPPMO_RECEIVED':
                                                     return 'Received by OPPMO';
                                                 case 'OPPMO_APPROVED':
@@ -434,15 +554,26 @@ export const RoutingTimeline = ({
                                                     return 'Suspended & Returned by OPPMO';
                                                 case 'TWG_RECEIVED':
                                                     return 'Received by BAC-TWG';
-                                                case 'READY_TO_PRINT':
-                                                    return 'BAC-TWG Final Approved & Ready to Print';
+                                                case 'TWG_APPROVED':
+                                                    return 'BAC-TWG Technical Review Approved & Released to Office Head';
                                                 case 'TWG_RETURNED':
                                                     return 'Suspended & Returned by BAC-TWG';
+                                                case 'READY_TO_PRINT':
+                                                    return 'Office Head Final Approved & Ready to Print';
                                                 case 'END_USER_RECEIVED':
                                                     return 'Acknowledged & Received by Implementing Unit';
                                                 case 'ADMIN_RECEIVED_REQUEST':
                                                     return 'Request Received by Administrator';
                                                 default:
+                                                    if (actionStr.startsWith('REQUESTED_')) {
+                                                        return `Requested ${actionStr.replace('REQUESTED_', '')} to Administrator`;
+                                                    }
+                                                    if (actionStr.startsWith('ADMIN_APPROVED_')) {
+                                                        return `Administrator Approved ${actionStr.replace('ADMIN_APPROVED_', '')}`;
+                                                    }
+                                                    if (actionStr.startsWith('ADMIN_REJECTED_')) {
+                                                        return `Administrator Rejected ${actionStr.replace('ADMIN_REJECTED_', '')}`;
+                                                    }
                                                     return actionStr.replace(/_/g, ' ');
                                             }
                                         };
@@ -553,6 +684,22 @@ export const RoutingTimeline = ({
                                                                 <div className="p-2 bg-slate-50 rounded border border-slate-200 flex flex-col justify-center">
                                                                     <span className="font-bold text-slate-600 block">Return Target:</span>
                                                                     <span className="text-slate-900 font-semibold">Returned to Implementing Unit</span>
+                                                                </div>
+                                                            </div>
+                                                        ) : actionStr === 'DRAFT_CREATED' ? (
+                                                            // Draft Created Card breakdown
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                                                <div className="p-2 bg-blue-50/60 rounded border border-blue-200/70">
+                                                                    <span className="font-bold text-blue-900 block">Date & Time Draft Initialized:</span>
+                                                                    <span className="font-mono text-blue-950 font-semibold">
+                                                                        {formatDate(route.submitted_at || route.created_at)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="p-2 bg-slate-50 rounded border border-slate-200 flex flex-col justify-center">
+                                                                    <span className="font-bold text-slate-700 block">Current Document Status:</span>
+                                                                    <span className="text-blue-800 font-semibold">
+                                                                        Draft Created &bull; In Preparation by Implementing Unit
+                                                                    </span>
                                                                 </div>
                                                             </div>
                                                         ) : (

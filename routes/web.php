@@ -42,6 +42,8 @@ Route::prefix('api')->group(function () {
 
         // Admin & Super Admin User Management
         Route::get('/users', [UserController::class, 'index'])->middleware('role:admin,super_admin');
+        Route::post('/users', [UserController::class, 'store'])->middleware('role:admin,super_admin');
+        Route::post('/users/{id}/signature', [UserController::class, 'updateSignature'])->middleware('role:admin,super_admin');
         Route::post('/users/{id}/change-password', [UserController::class, 'changePassword'])->middleware('role:admin,super_admin');
         Route::post('/users/{id}/approve', [UserController::class, 'approve'])->middleware('role:admin,super_admin');
         Route::post('/users/{id}/reject', [UserController::class, 'reject'])->middleware('role:admin,super_admin');

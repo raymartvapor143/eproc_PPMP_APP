@@ -14,6 +14,8 @@ import { OtherTermsManagement } from '../../components/Dashboard/OtherTermsManag
 import { SystemSettingsManagement } from '../../components/Dashboard/SystemSettingsManagement';
 import { isDeveloperModeActive } from '../../utils/devToolsGuard';
 import { AdminDashboard } from './AdminDashboard';
+import { CreateUserModal } from '../../components/Dashboard/CreateUserModal';
+import { UserSignatureModal } from '../../components/Dashboard/UserSignatureModal';
 import {
     PimsPublishReminderCard,
     getPpmpStartOfActivity,
@@ -54,6 +56,7 @@ import {
     Eye,
     Image as ImageIcon,
     PenTool,
+    UserPlus,
 } from 'lucide-react';
 
 export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) => {
@@ -123,6 +126,7 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
     const [processingUserId, setProcessingUserId] = useState(null);
     const [userActionFeedback, setUserActionFeedback] = useState({ type: '', text: '' });
     const [signaturePreviewUser, setSignaturePreviewUser] = useState(null);
+    const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
 
     // Office management & CSV/Excel Import state for Admin view
     const [officesList, setOfficesList] = useState(data?.offices || []);
@@ -912,15 +916,26 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                 Review pending registrations, manage active accounts, modify designations, and reset passwords
                                             </span>
                                         </div>
-                                        <div className="relative w-full sm:w-64">
-                                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                                            <input
-                                                type="text"
-                                                placeholder="Search name, email, office, phone..."
-                                                value={userSearch}
-                                                onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
-                                                className="w-full text-xs pl-8 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                            />
+                                        <div className="flex items-center gap-2.5 flex-wrap">
+                                            <div className="relative w-full sm:w-64">
+                                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search name, email, office, phone..."
+                                                    value={userSearch}
+                                                    onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
+                                                    className="w-full text-xs pl-8 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsCreateUserModalOpen(true)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer shrink-0"
+                                                title="Add New User Account"
+                                            >
+                                                <UserPlus className="w-3.5 h-3.5" />
+                                                <span>Add User</span>
+                                            </button>
                                         </div>
                                     </div>
                                     {userActionFeedback.text && (
@@ -1016,38 +1031,34 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                                              u.role === 'authorized_staff' ? 'Authorize Staff' :
                                                                              'End User'}
                                                                         </span>
-                                                                        {/* Uploaded Documents for Authorized Staff */}
-                                                                        {u.role === 'authorized_staff' && (
-                                                                            <div className="flex items-center gap-1 flex-wrap mt-0.5">
-                                                                                {u.authorization_letter_path ? (
-                                                                                    <a
-                                                                                        href={`/api/users/${u.id}/authorization-letter`}
-                                                                                        target="_blank"
-                                                                                        rel="noopener noreferrer"
-                                                                                        className="inline-flex items-center gap-1 text-[10px] text-teal-700 hover:text-teal-900 font-medium underline underline-offset-2 hover:bg-teal-50 px-1 py-0.5 rounded transition"
-                                                                                        title="View Authorization Letter PDF"
-                                                                                    >
-                                                                                        <FileText className="w-3 h-3 text-teal-600 shrink-0" />
-                                                                                        <span>PDF Letter</span>
-                                                                                    </a>
-                                                                                ) : (
-                                                                                    <span className="text-[10px] text-amber-600 italic">No Letter</span>
-                                                                                )}
-                                                                                {u.signature_path ? (
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() => setSignaturePreviewUser(u)}
-                                                                                        className="inline-flex items-center gap-1 text-[10px] text-indigo-700 hover:text-indigo-900 font-medium underline underline-offset-2 hover:bg-indigo-50 px-1 py-0.5 rounded transition cursor-pointer"
-                                                                                        title="View Signature"
-                                                                                    >
-                                                                                        <PenTool className="w-3 h-3 text-indigo-600 shrink-0" />
-                                                                                        <span>Signature</span>
-                                                                                    </button>
-                                                                                ) : (
-                                                                                    <span className="text-[10px] text-slate-400 italic">No Signature</span>
-                                                                                )}
-                                                                            </div>
-                                                                        )}
+                                                                        {/* Uploaded Documents & Specimen Signature for User */}
+                                                                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                                                            {u.authorization_letter_path && (
+                                                                                <a
+                                                                                    href={`/api/users/${u.id}/authorization-letter`}
+                                                                                    target="_blank"
+                                                                                    rel="noopener noreferrer"
+                                                                                    className="inline-flex items-center gap-1 text-[10px] text-teal-700 hover:text-teal-900 font-medium underline underline-offset-2 hover:bg-teal-50 px-1 py-0.5 rounded transition"
+                                                                                    title="View Authorization Letter PDF"
+                                                                                >
+                                                                                    <FileText className="w-3 h-3 text-teal-600 shrink-0" />
+                                                                                    <span>PDF Letter</span>
+                                                                                </a>
+                                                                            )}
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setSignaturePreviewUser(u)}
+                                                                                className={`inline-flex items-center gap-1 text-[10px] font-medium px-1 py-0.5 rounded transition cursor-pointer ${
+                                                                                    u.signature_path
+                                                                                        ? 'text-indigo-700 hover:text-indigo-900 underline underline-offset-2 hover:bg-indigo-50 font-semibold'
+                                                                                        : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-100'
+                                                                                }`}
+                                                                                title={u.signature_path ? 'View Official Signature' : 'Upload or Draw Specimen Signature'}
+                                                                            >
+                                                                                <PenTool className="w-3 h-3 text-indigo-600 shrink-0" />
+                                                                                <span>{u.signature_path ? 'Signature' : 'Signature'}</span>
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
                                                                 </td>
                                                                 <td className="p-3">
@@ -1570,47 +1581,29 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                     </div>
                 )}
 
-                {/* Signature Preview Modal */}
-                {signaturePreviewUser && (
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setSignaturePreviewUser(null)}>
-                        <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
-                            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <PenTool className="w-4 h-4 text-indigo-400" />
-                                    <span className="font-bold text-xs uppercase tracking-wider">Official Signature Preview</span>
-                                </div>
-                                <button type="button" onClick={() => setSignaturePreviewUser(null)} className="p-1 text-slate-400 hover:text-white rounded-lg transition">
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                            <div className="p-5 text-center space-y-3">
-                                <div className="text-xs font-bold text-slate-800">{signaturePreviewUser.name}</div>
-                                <div className="text-[11px] text-slate-500 font-mono">{signaturePreviewUser.email}</div>
-                                <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 flex items-center justify-center min-h-[120px]">
-                                    <img
-                                        src={`/api/users/${signaturePreviewUser.id}/signature?t=${Date.now()}`}
-                                        alt={`Signature of ${signaturePreviewUser.name}`}
-                                        className="max-h-28 max-w-full object-contain"
-                                        onError={(e) => {
-                                            e.target.onerror = null;
-                                            e.target.src = '';
-                                            e.target.parentNode.innerHTML = '<span class="text-xs text-rose-500 font-medium">Failed to load signature image</span>';
-                                        }}
-                                    />
-                                </div>
-                                <div className="pt-2 flex justify-end">
-                                    <button
-                                        type="button"
-                                        onClick={() => setSignaturePreviewUser(null)}
-                                        className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
-                                    >
-                                        Close
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                {/* Signature Preview & Update Modal */}
+                <UserSignatureModal
+                    user={signaturePreviewUser}
+                    isOpen={Boolean(signaturePreviewUser)}
+                    onClose={() => setSignaturePreviewUser(null)}
+                    onUpdated={(updatedUser) => {
+                        setUsersList(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u));
+                        setSignaturePreviewUser(null);
+                        setUserActionFeedback({ type: 'success', text: `Signature for ${updatedUser.name} updated successfully.` });
+                    }}
+                />
+
+                {/* Create User Modal */}
+                <CreateUserModal
+                    isOpen={isCreateUserModalOpen}
+                    onClose={() => setIsCreateUserModalOpen(false)}
+                    offices={officesList}
+                    currentUserRole={user?.role}
+                    onSuccess={(newUser, msg) => {
+                        setUsersList(prev => [newUser, ...prev]);
+                        setUserActionFeedback({ type: 'success', text: msg || 'User created successfully.' });
+                    }}
+                />
             </div>
         );
     }
@@ -2028,19 +2021,30 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                             </span>
                         </div>
 
-                        {/* Search User */}
-                        <div className="relative w-full sm:w-64">
-                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                            <input
-                                type="text"
-                                placeholder="Search name, email, office, phone..."
-                                value={userSearch}
-                                onChange={(e) => {
-                                    setUserSearch(e.target.value);
-                                    setUserPage(1);
-                                }}
-                                className="w-full text-xs pl-8 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
+                        {/* Search & Add User */}
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                            <div className="relative w-full sm:w-64">
+                                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                <input
+                                    type="text"
+                                    placeholder="Search name, email, office, phone..."
+                                    value={userSearch}
+                                    onChange={(e) => {
+                                        setUserSearch(e.target.value);
+                                        setUserPage(1);
+                                    }}
+                                    className="w-full text-xs pl-8 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsCreateUserModalOpen(true)}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer shrink-0"
+                                title="Add New User Account"
+                            >
+                                <UserPlus className="w-3.5 h-3.5" />
+                                <span>Add User</span>
+                            </button>
                         </div>
                     </div>
 
@@ -2245,10 +2249,10 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                                                     u.role === 'authorized_staff' ? 'Authorize Staff' :
                                                                                         'End User'}
                                                         </span>
-                                                        {/* Uploaded Documents for Authorized Staff */}
-                                                        {u.role === 'authorized_staff' && (
-                                                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                                                                {u.authorization_letter_path ? (
+                                                        {/* Uploaded Documents & Signature */}
+                                                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                                                            {u.role === 'authorized_staff' && (
+                                                                u.authorization_letter_path ? (
                                                                     <a
                                                                         href={`/api/users/${u.id}/authorization-letter`}
                                                                         target="_blank"
@@ -2261,22 +2265,18 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                                                                     </a>
                                                                 ) : (
                                                                     <span className="text-[10px] text-amber-600 italic">No Letter PDF</span>
-                                                                )}
-                                                                {u.signature_path ? (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => setSignaturePreviewUser(u)}
-                                                                        className="inline-flex items-center gap-1 text-[10px] text-indigo-700 hover:text-indigo-900 font-medium underline underline-offset-2 hover:bg-indigo-50 px-1 py-0.5 rounded transition cursor-pointer"
-                                                                        title="View Signature"
-                                                                    >
-                                                                        <PenTool className="w-3 h-3 text-indigo-600 shrink-0" />
-                                                                        <span>Signature</span>
-                                                                    </button>
-                                                                ) : (
-                                                                    <span className="text-[10px] text-slate-400 italic">No Signature</span>
-                                                                )}
-                                                            </div>
-                                                        )}
+                                                                )
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSignaturePreviewUser(u)}
+                                                                className="inline-flex items-center gap-1 text-[10px] text-indigo-700 hover:text-indigo-900 font-medium underline underline-offset-2 hover:bg-indigo-50 px-1 py-0.5 rounded transition cursor-pointer"
+                                                                title={u.signature_path ? "View / Manage Signature" : "Add / Upload Signature"}
+                                                            >
+                                                                <PenTool className="w-3 h-3 text-indigo-600 shrink-0" />
+                                                                <span>{u.signature_path ? 'Signature' : 'No Signature (Add)'}</span>
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="p-3 text-slate-700">
@@ -3965,51 +3965,29 @@ export const Dashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) =>
                 </div>
             )}
 
-            {/* Signature Preview Modal */}
-            {signaturePreviewUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4" onClick={() => setSignaturePreviewUser(null)}>
-                    <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-150" onClick={e => e.stopPropagation()}>
-                        <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-                            <h3 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
-                                <PenTool className="w-4 h-4 text-indigo-400" />
-                                Official Signature Preview
-                            </h3>
-                            <button
-                                type="button"
-                                onClick={() => setSignaturePreviewUser(null)}
-                                className="text-slate-400 hover:text-white p-1 rounded-md transition"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                        <div className="p-6 text-center space-y-3">
-                            <div className="text-sm font-bold text-slate-800">{signaturePreviewUser.name}</div>
-                            <div className="text-xs text-slate-500 font-mono">{signaturePreviewUser.email}</div>
-                            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 flex items-center justify-center min-h-[120px]">
-                                <img
-                                    src={`/api/users/${signaturePreviewUser.id}/signature?t=${Date.now()}`}
-                                    alt={`Signature of ${signaturePreviewUser.name}`}
-                                    className="max-h-28 max-w-full object-contain"
-                                    onError={(e) => {
-                                        e.target.onerror = null;
-                                        e.target.src = '';
-                                        e.target.parentNode.innerHTML = '<span class="text-xs text-rose-500 font-medium">Failed to load signature image</span>';
-                                    }}
-                                />
-                            </div>
-                            <div className="pt-2 flex justify-end">
-                                <button
-                                    type="button"
-                                    onClick={() => setSignaturePreviewUser(null)}
-                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
-                                >
-                                    Close
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Signature Preview & Update Modal for Admin View */}
+            <UserSignatureModal
+                user={signaturePreviewUser}
+                isOpen={Boolean(signaturePreviewUser)}
+                onClose={() => setSignaturePreviewUser(null)}
+                onUpdated={(updatedUser) => {
+                    setUsersList(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u));
+                    setSignaturePreviewUser(null);
+                    setUserActionFeedback({ type: 'success', text: `Signature for ${updatedUser.name} updated successfully.` });
+                }}
+            />
+
+            {/* Create User Modal for Admin View */}
+            <CreateUserModal
+                isOpen={isCreateUserModalOpen}
+                onClose={() => setIsCreateUserModalOpen(false)}
+                offices={officesList}
+                currentUserRole={user?.role}
+                onSuccess={(newUser, msg) => {
+                    setUsersList(prev => [newUser, ...prev]);
+                    setUserActionFeedback({ type: 'success', text: msg || 'User created successfully.' });
+                }}
+            />
         </div>
     );
 };

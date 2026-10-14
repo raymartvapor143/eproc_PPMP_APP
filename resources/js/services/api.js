@@ -205,6 +205,8 @@ export const signatoryService = {
 
 export const userService = {
     getAll: () => api.get('/users'),
+    create: (data) => api.post('/users', data),
+    updateSignature: (id, data) => api.post(`/users/${id}/signature`, data),
     changePassword: (id, password) => api.post(`/users/${id}/change-password`, { password }),
     updateRole: (id, role) => api.put(`/users/${id}/role`, { role }),
     approve: (id) => api.post(`/users/${id}/approve`),

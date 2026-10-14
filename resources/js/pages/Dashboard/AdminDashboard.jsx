@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { StatusBadge, formatCurrency, formatDate } from '../../components/UI/StatusBadge';
 import { PaginationControl } from '../../components/UI/PaginationControl';
 import { AdminActivityLog } from '../../components/Dashboard/AdminActivityLog';
-import { userService, ppmpService } from '../../services/api';
+import { userService, ppmpService, officeService } from '../../services/api';
 import {
     Users,
+    UserPlus,
     Shield,
     FileSpreadsheet,
     Activity,
@@ -40,6 +41,8 @@ import {
 import { FundSourcesManagement } from '../../components/Dashboard/FundSourcesManagement';
 import { ProcurementConditionsManagement } from '../../components/Dashboard/ProcurementConditionsManagement';
 import { OtherTermsManagement } from '../../components/Dashboard/OtherTermsManagement';
+import { CreateUserModal } from '../../components/Dashboard/CreateUserModal';
+import { UserSignatureModal } from '../../components/Dashboard/UserSignatureModal';
 
 export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload }) => {
     // Current Active Tab: 'users' | 'amendments' | 'logs' | 'ppmps' | 'fund_sources' | 'conditions' | 'other_terms'
@@ -90,6 +93,7 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
     const [roleError, setRoleError] = useState('');
 
     const [signaturePreviewUser, setSignaturePreviewUser] = useState(null);
+    const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
 
     // ──────────────────────────────────────────────────────────────────────────
     // AMENDED & SUPPLEMENTAL STATE
@@ -766,16 +770,27 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                             </button>
                         </div>
 
-                        {/* Search input */}
-                        <div className="relative flex-1 max-w-md">
-                            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                            <input
-                                type="text"
-                                value={userSearch}
-                                onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
-                                placeholder="Search by name, email, office, phone..."
-                                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                            />
+                        {/* Search & Add User */}
+                        <div className="flex items-center gap-2 flex-1 max-w-lg">
+                            <div className="relative flex-1">
+                                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                                <input
+                                    type="text"
+                                    value={userSearch}
+                                    onChange={(e) => { setUserSearch(e.target.value); setUserPage(1); }}
+                                    placeholder="Search by name, email, office, phone..."
+                                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsCreateUserModalOpen(true)}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-xs transition cursor-pointer shrink-0"
+                                title="Add New User Account"
+                            >
+                                <UserPlus className="w-3.5 h-3.5" />
+                                <span>Add User</span>
+                            </button>
                         </div>
                     </div>
 
@@ -839,19 +854,15 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                                                     </td>
                                                     <td className="p-3">
                                                         <div className="flex items-center gap-1.5 flex-wrap">
-                                                            {u.signature_path ? (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setSignaturePreviewUser(u)}
-                                                                    className="inline-flex items-center gap-1 text-[10px] text-indigo-700 hover:text-indigo-900 font-medium underline underline-offset-2 hover:bg-indigo-50 px-1 py-0.5 rounded transition cursor-pointer"
-                                                                    title="View Uploaded Signature"
-                                                                >
-                                                                    <PenTool className="w-3 h-3 text-indigo-600" />
-                                                                    <span>Signature</span>
-                                                                </button>
-                                                            ) : (
-                                                                <span className="text-[10px] text-slate-400 italic">None</span>
-                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setSignaturePreviewUser(u)}
+                                                                className="inline-flex items-center gap-1 text-[10px] text-indigo-700 hover:text-indigo-900 font-medium underline underline-offset-2 hover:bg-indigo-50 px-1 py-0.5 rounded transition cursor-pointer"
+                                                                title={u.signature_path ? "View / Manage Signature" : "Add / Upload Signature"}
+                                                            >
+                                                                <PenTool className="w-3 h-3 text-indigo-600" />
+                                                                <span>{u.signature_path ? 'Signature' : 'No Signature (Add)'}</span>
+                                                            </button>
                                                             {u.authorization_letter_path && (
                                                                 <a
                                                                     href={`/api/users/${u.id}/authorization-letter`}
@@ -1672,50 +1683,29 @@ export const AdminDashboard = ({ data, user, onSelectPpmp, onNavigate, onReload 
                 </div>
             )}
 
-            {/* Signature Preview Modal */}
-            {signaturePreviewUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
-                        <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <PenTool className="w-4 h-4 text-indigo-400" />
-                                <h3 className="text-sm font-bold">Official Signature — {signaturePreviewUser.name}</h3>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setSignaturePreviewUser(null)}
-                                className="text-slate-400 hover:text-white cursor-pointer"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                        <div className="p-6 flex flex-col items-center justify-center bg-slate-50">
-                            <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-inner max-w-xs w-full flex items-center justify-center min-h-[140px]">
-                                <img
-                                    src={`/api/users/${signaturePreviewUser.id}/signature`}
-                                    alt="User Signature"
-                                    className="max-h-32 object-contain"
-                                    onError={(e) => {
-                                        e.target.onerror = null;
-                                        e.target.parentElement.innerHTML = '<span class="text-xs text-slate-400 italic">Signature preview unavailable</span>';
-                                    }}
-                                />
-                            </div>
-                            <span className="text-xs text-slate-500 mt-3 font-semibold">{signaturePreviewUser.name}</span>
-                            <span className="text-[10px] text-slate-400">{signaturePreviewUser.designation || 'Specialist'}</span>
-                        </div>
-                        <div className="p-3 bg-white border-t border-slate-100 flex justify-end">
-                            <button
-                                type="button"
-                                onClick={() => setSignaturePreviewUser(null)}
-                                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold cursor-pointer"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {/* Signature Preview & Update Modal */}
+            <UserSignatureModal
+                user={signaturePreviewUser}
+                isOpen={Boolean(signaturePreviewUser)}
+                onClose={() => setSignaturePreviewUser(null)}
+                onUpdated={(updatedUser) => {
+                    setUsersList(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u));
+                    setSignaturePreviewUser(null);
+                    setUserFeedback({ type: 'success', text: `Signature for ${updatedUser.name} updated successfully.` });
+                }}
+            />
+
+            {/* Create User Modal */}
+            <CreateUserModal
+                isOpen={isCreateUserModalOpen}
+                onClose={() => setIsCreateUserModalOpen(false)}
+                offices={officesList}
+                currentUserRole={user?.role}
+                onSuccess={(newUser, msg) => {
+                    setUsersList(prev => [newUser, ...prev]);
+                    setUserFeedback({ type: 'success', text: msg || 'User created successfully.' });
+                }}
+            />
 
             {/* Disapprove Amendment Modal */}
             {rejectAmendmentPpmp && (

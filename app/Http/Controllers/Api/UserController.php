@@ -29,6 +29,153 @@ class UserController extends Controller
     }
 
     /**
+     * Create a new user (Admin & Super Admin)
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $admin = $request->user();
+        if (!$admin->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        }
+
+        if ($request->input('role') === 'super_admin' && !$admin->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Only Super Admin can assign the Super Admin role.'], 403);
+        }
+
+        $allowedRoles = ['end_user', 'head', 'budget_officer', 'oppmo', 'twg', 'authorized_staff', 'pacco', 'admin'];
+        if ($admin->isSuperAdmin()) {
+            $allowedRoles[] = 'super_admin';
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:6'],
+            'role' => ['required', 'string', 'in:' . implode(',', $allowedRoles)],
+            'office_id' => ['nullable', 'integer', 'exists:offices,id'],
+            'designation' => ['nullable', 'string', 'max:255'],
+            'phone_number' => ['nullable', 'string', 'max:50'],
+            'address' => ['nullable', 'string', 'max:255'],
+            'signature' => ['nullable', 'string'],
+        ]);
+
+        $signaturePath = null;
+        if (!empty($validated['signature'])) {
+            $sigData = $validated['signature'];
+            if (preg_match('/^data:image\/(\w+);base64,/', $sigData, $type)) {
+                $sigData = substr($sigData, strpos($sigData, ',') + 1);
+                $type = strtolower($type[1]);
+                $decoded = base64_decode($sigData);
+
+                if ($decoded !== false) {
+                    $filename = 'sig_' . \Illuminate\Support\Str::uuid() . '.' . ($type === 'jpeg' ? 'jpg' : 'png');
+                    $signaturePath = 'signatures/' . $filename;
+                    \Illuminate\Support\Facades\Storage::disk('local')->put($signaturePath, $decoded);
+                }
+            }
+        } elseif ($request->hasFile('signature_file')) {
+            $uploaded = $request->file('signature_file');
+            $ext = strtolower($uploaded->getClientOriginalExtension()) ?: 'png';
+            $filename = 'sig_' . \Illuminate\Support\Str::uuid() . '.' . $ext;
+            $signaturePath = 'signatures/' . $filename;
+            \Illuminate\Support\Facades\Storage::disk('local')->put($signaturePath, file_get_contents($uploaded->getRealPath()));
+        }
+
+        $user = User::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'phone_number' => $validated['phone_number'] ?? null,
+            'address' => $validated['address'] ?? null,
+            'password' => Hash::make($validated['password']),
+            'role' => $validated['role'],
+            'office_id' => $validated['office_id'] ?? null,
+            'designation' => $validated['designation'] ?? null,
+            'signature_path' => $signaturePath,
+            'is_active' => true,
+            'approval_status' => 'approved',
+        ]);
+
+        AuditLog::log(
+            'USER_CREATED_BY_ADMIN',
+            'users',
+            $user->id,
+            null,
+            ['created_user_id' => $user->id, 'email' => $user->email, 'role' => $user->role],
+            $admin->id
+        );
+
+        return response()->json([
+            'message' => "User account for {$user->name} created and activated successfully.",
+            'user' => $user->load('office'),
+        ], 201);
+    }
+
+    /**
+     * Upload or update a user's signature (Admin & Super Admin)
+     */
+    public function updateSignature(Request $request, int $id): JsonResponse
+    {
+        $admin = $request->user();
+        if (!$admin->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Admin access required.'], 403);
+        }
+
+        $targetUser = User::findOrFail($id);
+
+        if ($targetUser->isSuperAdmin() && !$admin->isSuperAdmin()) {
+            return response()->json(['message' => 'Unauthorized. Only Super Administrators can manage Super Administrator accounts.'], 403);
+        }
+
+        $signaturePath = null;
+        $sigInput = $request->input('signature') ?? $request->input('signature_data');
+        if (!empty($sigInput)) {
+            $sigData = $sigInput;
+            if (preg_match('/^data:image\/(\w+);base64,/', $sigData, $type)) {
+                $sigData = substr($sigData, strpos($sigData, ',') + 1);
+                $type = strtolower($type[1]);
+                $decoded = base64_decode($sigData);
+
+                if ($decoded !== false) {
+                    $filename = 'sig_' . \Illuminate\Support\Str::uuid() . '.' . ($type === 'jpeg' ? 'jpg' : 'png');
+                    $signaturePath = 'signatures/' . $filename;
+                    \Illuminate\Support\Facades\Storage::disk('local')->put($signaturePath, $decoded);
+                }
+            }
+        } elseif ($request->hasFile('signature_file')) {
+            $uploaded = $request->file('signature_file');
+            $ext = strtolower($uploaded->getClientOriginalExtension()) ?: 'png';
+            $filename = 'sig_' . \Illuminate\Support\Str::uuid() . '.' . $ext;
+            $signaturePath = 'signatures/' . $filename;
+            \Illuminate\Support\Facades\Storage::disk('local')->put($signaturePath, file_get_contents($uploaded->getRealPath()));
+        }
+
+        if (!$signaturePath) {
+            return response()->json(['message' => 'Valid signature image is required.'], 422);
+        }
+
+        // Delete previous signature if exists
+        if ($targetUser->signature_path && \Illuminate\Support\Facades\Storage::disk('local')->exists($targetUser->signature_path)) {
+            \Illuminate\Support\Facades\Storage::disk('local')->delete($targetUser->signature_path);
+        }
+
+        $targetUser->update(['signature_path' => $signaturePath]);
+
+        AuditLog::log(
+            'USER_SIGNATURE_UPDATED_BY_ADMIN',
+            'users',
+            $targetUser->id,
+            null,
+            ['user_id' => $targetUser->id],
+            $admin->id
+        );
+
+        return response()->json([
+            'message' => "Official signature for {$targetUser->name} has been updated successfully.",
+            'user' => $targetUser->fresh(['office']),
+        ]);
+    }
+
+    /**
      * Change a user's password (Admin only)
      */
     public function changePassword(Request $request, int $id): JsonResponse

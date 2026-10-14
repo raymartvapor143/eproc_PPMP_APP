@@ -85,7 +85,7 @@ export const getInitialAttachmentLists = (ppmp, procurementItems, savedData) => 
                     totalCost: (r.totalCost !== null && r.totalCost !== undefined) ? r.totalCost : '',
                 }))
                 : [
-                    { id: 1, itemNo: 1, unit: '', description: item.description || '', qty: '', unitCost: '', totalCost: '' }
+                    { id: 1, itemNo: 1, unit: '', description: '', qty: '', unitCost: '', totalCost: '' }
                 ],
         };
     });

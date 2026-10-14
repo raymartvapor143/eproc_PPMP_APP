@@ -179,4 +179,80 @@ class SuperAdminAndAdminRoleTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('role', 'admin');
     }
+
+    public function test_super_admin_and_admin_can_add_new_user(): void
+    {
+        // 1. Super admin can create a user
+        $this->actingAs($this->superAdmin);
+        $response = $this->postJson('/api/users', [
+            'name' => 'Newly Created Staff',
+            'email' => 'newstaff@example.test',
+            'password' => 'SecurePass123!',
+            'role' => 'authorized_staff',
+            'office_id' => $this->office->id,
+            'designation' => 'Procurement Assistant',
+            'phone_number' => '09123456789',
+        ]);
+        $response->assertStatus(201);
+        $response->assertJsonPath('user.email', 'newstaff@example.test');
+        $response->assertJsonPath('user.is_active', true);
+        $response->assertJsonPath('user.approval_status', 'approved');
+
+        // 2. Admin can create an end_user
+        $this->actingAs($this->adminUser);
+        $responseAdmin = $this->postJson('/api/users', [
+            'name' => 'Admin Created EndUser',
+            'email' => 'enduser2@example.test',
+            'password' => 'SecurePass123!',
+            'role' => 'end_user',
+            'office_id' => $this->office->id,
+        ]);
+        $responseAdmin->assertStatus(201);
+        $responseAdmin->assertJsonPath('user.email', 'enduser2@example.test');
+
+        // 3. Admin CANNOT escalate and create a super_admin
+        $responseForbidden = $this->postJson('/api/users', [
+            'name' => 'Fake Super Admin',
+            'email' => 'fakesuper@example.test',
+            'password' => 'SecurePass123!',
+            'role' => 'super_admin',
+        ]);
+        $responseForbidden->assertStatus(403);
+
+        // 4. End user cannot create users
+        $this->actingAs($this->endUser);
+        $responseUnauth = $this->postJson('/api/users', [
+            'name' => 'Hacker User',
+            'email' => 'hacker@example.test',
+            'password' => 'SecurePass123!',
+            'role' => 'admin',
+        ]);
+        $responseUnauth->assertStatus(403);
+    }
+
+    public function test_admin_and_super_admin_can_update_user_signature(): void
+    {
+        $this->actingAs($this->superAdmin);
+
+        // 1x1 transparent png data url
+        $fakePngDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+        $response = $this->postJson("/api/users/{$this->endUser->id}/signature", [
+            'signature_data' => $fakePngDataUrl,
+        ]);
+        $response->assertOk();
+        $this->assertStringStartsWith('signatures/', $response->json('user.signature_path'));
+
+        // Verify signature is fetchable via signature endpoint
+        $sigResponse = $this->getJson("/api/users/{$this->endUser->id}/signature");
+        $sigResponse->assertOk();
+        $this->assertEquals('image/png', $sigResponse->headers->get('content-type'));
+
+        // Admin can also update signature
+        $this->actingAs($this->adminUser);
+        $response2 = $this->postJson("/api/users/{$this->endUser->id}/signature", [
+            'signature_data' => $fakePngDataUrl,
+        ]);
+        $response2->assertOk();
+    }
 }
